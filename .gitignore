@@ -1,0 +1,6 @@
+mc-docker.db
+data/
+example*
+.vscode/
+.pytest*
+__pycache__

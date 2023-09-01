@@ -101,25 +101,23 @@ async def monitor():
         new_servers = await get_server_info(config["watch_path"])
         stored_servers = await db.get_all_servers()
 
-        if new_servers == stored_servers:
-            continue
+        if new_servers != stored_servers:
+            logging.info("servers changed, updating database")
+            await db.override_all_servers(new_servers)
 
-        logging.info("servers changed, updating database")
-        await db.override_all_servers(new_servers)
+            notification = NotificationT()
+            for name, port in new_servers.items():
+                if name not in stored_servers:
+                    notification.append({"type": "new", "name": name, "port": port})
+                elif stored_servers[name] != port:
+                    notification.append({"type": "updated", "name": name, "port": port})
 
-        notification = NotificationT()
-        for name, port in new_servers.items():
-            if name not in stored_servers:
-                notification.append({"type": "new", "name": name, "port": port})
-            elif stored_servers[name] != port:
-                notification.append({"type": "updated", "name": name, "port": port})
+            for name, port in stored_servers.items():
+                if name not in new_servers:
+                    notification.append({"type": "removed", "name": name, "port": port})
 
-        for name, port in stored_servers.items():
-            if name not in new_servers:
-                notification.append({"type": "removed", "name": name, "port": port})
-
-        logging.info(f"notification: {notification}")
-        await notify_clients(notification)
+            logging.info(f"notification: {notification}")
+            await notify_clients(notification)
 
         await asyncio.sleep(config["poll_interval"])
 

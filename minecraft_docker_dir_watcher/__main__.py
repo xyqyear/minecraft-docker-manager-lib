@@ -60,7 +60,7 @@ db = Database()
 
 
 async def notify_clients(notification: NotificationT):
-    logging.debug(f"notifying clients...")
+    logging.debug("notifying clients...")
     for ws in ws_clients:
         if ws.closed:
             continue

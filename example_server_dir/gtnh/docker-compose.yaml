@@ -1,0 +1,32 @@
+services:
+  mc:
+    image: itzg/minecraft-server:java8-openj9
+    container_name: mc-gtnh
+    environment:
+      EULA: true
+      TZ: Asia/Shanghai
+      VERSION: 1.7.10
+      INIT_MEMORY: 2G
+      MAX_MEMORY: 8G
+      TYPE: FORGE
+      FORGE_VERSION: 10.13.4.1614
+      MAX_TICK_TIME: -1
+      WHITE_LIST: false
+      SPAWN_PROTECTION: 0
+      ENABLE_RCON: true
+      RCON_PASSWORD: password
+      MODE: survival
+      VIEW_DISTANCE: 8
+      DIFFICULTY: hard
+      USE_AIKAR_FLAGS: true
+      ENABLE_COMMAND_BLOCK: true
+      PREVENT_PROXY_CONNECTIONS: false
+      ALLOW_FLIGHT: true
+    ports:
+      - 25566:25565
+      - 25576:25575
+    volumes:
+      - ./data:/data
+    stdin_open: true
+    tty: true
+    restart: unless-stopped

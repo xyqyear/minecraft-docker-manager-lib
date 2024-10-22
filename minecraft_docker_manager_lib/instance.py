@@ -1,3 +1,4 @@
+import asyncio
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -157,6 +158,14 @@ class MCInstance:
         await compose_obj.async_to_file(compose_file_path)
         await aioos.makedirs(self._servers_path / self._name / "data", exist_ok=True)
 
+    async def update_compose_file(self, compose_obj: ComposeFile) -> None:
+        compose_file_path = await self.get_compose_file_path()
+        if compose_file_path is None:
+            raise FileNotFoundError(
+                f"Could not find docker-compose file for server {self._name}"
+            )
+        await compose_obj.async_to_file(compose_file_path)
+
     async def remove(self) -> None:
         compose_manager = await self.get_compose_manager()
         if await compose_manager.running():
@@ -204,13 +213,13 @@ class MCInstance:
         compose_manager = await self.get_compose_manager()
         return await compose_manager.running()
 
-    async def update_compose_file(self, compose_obj: ComposeFile) -> None:
-        compose_file_path = await self.get_compose_file_path()
-        if compose_file_path is None:
-            raise FileNotFoundError(
-                f"Could not find docker-compose file for server {self._name}"
-            )
-        await compose_obj.async_to_file(compose_file_path)
+    async def healthy(self) -> bool:
+        compose_manager = await self.get_compose_manager()
+        return await compose_manager.healthy("mc")
+
+    async def wait_until_healthy(self) -> None:
+        while not await self.healthy():
+            await asyncio.sleep(0.5)
 
     async def get_server_info(self):
         """
@@ -282,4 +291,4 @@ class MCInstance:
         this method will send a command to the server using socat and docker attach
         """
         compose_manager = await self.get_compose_manager()
-        await compose_manager.send_to_stdin(command)
+        await compose_manager.send_to_stdin("mc", command)

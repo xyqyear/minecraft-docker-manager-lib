@@ -35,6 +35,27 @@ class DockerPsParsed(BaseModel):
         return cls(**data)
 
 
+class Publisher(BaseModel):
+    URL: str
+    TargetPort: int
+    PublishedPort: int
+    Protocol: str
+
+
+class DockerComposePsParsed(DockerPsParsed):
+    exit_code: int = Field(alias="ExitCode")
+    health: str = Field(alias="Health")
+    name: str = Field(alias="Name")
+    project: str = Field(alias="Project")
+    publishers: list[Publisher] = Field(alias="Publishers")
+    service: str = Field(alias="Service")
+
+    @classmethod
+    def from_docker_compose_ps(cls, data: dict[str, Any]) -> "DockerComposePsParsed":
+        data["Labels"] = cls.parse_labels(data["Labels"])
+        return cls(**data)
+
+
 class ComposeManager:
     def __init__(self, compose_file_path: str | Path) -> None:
         self.compose_file_path = Path(compose_file_path)
@@ -48,15 +69,17 @@ class ComposeManager:
         return await self.run_command("exec", service_name, command, *args)
 
     @asyncify
-    def send_to_stdin(self, text: str):
+    def send_to_stdin(self, service_name: str, text: str, newline: bool = True):
+        """
+        does not include a newline at the end
+        """
         socat_command = [
             "socat",
-            f"EXEC:docker compose -f {self.compose_file_path} attach mc,pty",
+            f"EXEC:docker compose -f {self.compose_file_path} attach {service_name},pty",
             "STDIN",
         ]
-        echo_process = subprocess.Popen(["echo", text], stdout=subprocess.PIPE)
-        socat_process = subprocess.Popen(socat_command, stdin=echo_process.stdout)
-        _ = socat_process.communicate()
+        socat_process = subprocess.Popen(socat_command, stdin=subprocess.PIPE)
+        socat_process.communicate(input=text.encode() + (b"\n" if newline else b""))
 
     async def up_detached(self):
         await self.run_command("up", "-d")
@@ -80,6 +103,17 @@ class ComposeManager:
     async def created(self) -> bool:
         process = await self.run_command("ps", "--all", "-q")
         return process != ""
+
+    async def ps(self, service_name: str) -> DockerComposePsParsed:
+        output = await self.run_command("ps", "--no-trunc", "--format", "json")
+        for line in output.splitlines():
+            parsed = DockerComposePsParsed.from_docker_compose_ps(json.loads(line))
+            if parsed.name == service_name:
+                return parsed
+        raise ValueError(f"Could not find service {service_name}")
+
+    async def healthy(self, service_name: str) -> bool:
+        return (await self.ps(service_name)).health == "healthy"
 
 
 class DockerManager:

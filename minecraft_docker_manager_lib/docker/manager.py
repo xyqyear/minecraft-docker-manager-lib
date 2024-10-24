@@ -108,12 +108,16 @@ class ComposeManager:
         output = await self.run_command("ps", "--no-trunc", "--format", "json")
         for line in output.splitlines():
             parsed = DockerComposePsParsed.from_docker_compose_ps(json.loads(line))
-            if parsed.name == service_name:
+            if parsed.service == service_name:
                 return parsed
         raise ValueError(f"Could not find service {service_name}")
 
     async def healthy(self, service_name: str) -> bool:
-        return (await self.ps(service_name)).health == "healthy"
+        try:
+            compose_ps = await self.ps(service_name)
+        except ValueError:
+            return False
+        return compose_ps.health == "healthy"
 
 
 class DockerManager:

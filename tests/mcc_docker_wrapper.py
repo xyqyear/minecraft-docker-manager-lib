@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 import aiofiles
+import aiofiles.os as aioos
 
 from minecraft_docker_manager_lib.docker.manager import ComposeManager
 
@@ -9,6 +10,7 @@ docker_compose_content_template = """
 services:
   mcc:
     image: ghcr.io/xyqyear/minecraft-console-client
+    container_name: mcc-{username}
     command: ["{username}", "-", "{server}"]
     network_mode: host
     stdin_open: true
@@ -26,6 +28,7 @@ class MCCDockerWrapper:
         self.compose_manager = ComposeManager(self.docker_compose_path)
 
     async def create(self):
+        await aioos.makedirs(self.path, exist_ok=True)
         async with aiofiles.open(self.docker_compose_path, "w") as f:
             await f.write(self.docker_compose_content)
 

@@ -80,7 +80,7 @@ class ComposeFile(ComposeSpecification):
         return await asyncify(cls.from_file)(file_path)
 
     def to_dict(self) -> dict[Any, Any]:
-        return self.model_dump()
+        return self.model_dump(exclude_none=True)
 
     def to_file(self, file_path: str | Path) -> None:
         with open(file_path, "w", encoding="utf8") as file:

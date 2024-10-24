@@ -68,7 +68,7 @@ class MCInstance:
             )
         return ComposeManager(compose_file_path)
 
-    async def get_compose_obj(self) -> ComposeFile | None:
+    def verify_compose_obj(self, compose_obj: ComposeFile) -> bool:
         """
         a docker minecraft server must meet the following requirements:
         - have a docker-compose file
@@ -77,10 +77,8 @@ class MCInstance:
             - this service must use the image "itzg/minecraft-server"
             - this service must have a port mapping to 25565
         """
-        compose_obj = await ComposeFile.async_from_file(self._servers_path)
-
         if compose_obj.services is None:  # type: ignore
-            return
+            return False
         for service_name, service in compose_obj.services.items():  # type: ignore
             if service_name != "mc":
                 continue
@@ -95,7 +93,18 @@ class MCInstance:
             for port in service.ports:
                 if isinstance(port, Ports):
                     if str(port.target) == "25565":
-                        return compose_obj
+                        return True
+        return False
+
+    async def get_compose_obj(self) -> ComposeFile:
+        compose_obj = await ComposeFile.async_from_file(self._servers_path)
+
+        if self.verify_compose_obj(compose_obj):
+            return compose_obj
+
+        raise FileNotFoundError(
+            f"Could not find valid docker-compose file for server {self._name}"
+        )
 
     def _get_log_path(self) -> Path:
         return self._servers_path / self._name / "data" / "logs" / "latest.log"
@@ -149,6 +158,9 @@ class MCInstance:
         create a new directory for the server and write the compose file to it
         it also creates a data directory for the server
         """
+        if not self.verify_compose_obj(compose_obj):
+            raise ValueError("Invalid compose file")
+
         await aioos.makedirs(self._servers_path / self._name, exist_ok=True)
         if await self.get_compose_file_path() is not None:
             raise FileExistsError(
@@ -159,6 +171,9 @@ class MCInstance:
         await aioos.makedirs(self._servers_path / self._name / "data", exist_ok=True)
 
     async def update_compose_file(self, compose_obj: ComposeFile) -> None:
+        if not self.verify_compose_obj(compose_obj):
+            raise ValueError("Invalid compose file")
+
         compose_file_path = await self.get_compose_file_path()
         if compose_file_path is None:
             raise FileNotFoundError(
@@ -226,9 +241,6 @@ class MCInstance:
         this method will return parsed compose file data
         """
         compose_obj = await self.get_compose_obj()
-        assert (
-            compose_obj is not None
-        ), f"Could not find compose file for server {self._name}"
 
         assert (
             compose_obj.services is not None
@@ -269,7 +281,7 @@ class MCInstance:
 
     async def list_players(self) -> list[str]:
         compose_manager = await self.get_compose_manager()
-        players = await compose_manager.exec_command("mc", "list")
+        players = await compose_manager.exec_command("mc", "rcon-cli", "list")
         if ":" not in players:
             return []
         players_str = players.split(":")[1].strip()

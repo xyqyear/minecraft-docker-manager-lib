@@ -41,11 +41,7 @@ class DockerMCManager:
             MCInstance(self.servers_path, sub_dir).get_compose_obj()
             for sub_dir in await aioos.listdir(self.servers_path)
         ]
-        return [
-            compose_obj
-            for compose_obj in await asyncio.gather(*compose_obj_coroutines)
-            if compose_obj is not None
-        ]
+        return await asyncio.gather(*compose_obj_coroutines)
 
     async def get_all_server_names(self) -> list[str]:
         """

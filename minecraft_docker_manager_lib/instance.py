@@ -40,6 +40,8 @@ class MCInstance:
     def __init__(self, servers_path: str | Path, name: str) -> None:
         self._servers_path = Path(servers_path)
         self._name = name
+        self._project_path = self._servers_path / self._name
+        self._compose_manager = ComposeManager(self._project_path)
 
     def get_name(self) -> str:
         return self._name
@@ -59,14 +61,6 @@ class MCInstance:
         return await self.get_compose_file_path_for_server(
             self._servers_path, self._name
         )
-
-    async def get_compose_manager(self) -> ComposeManager:
-        compose_file_path = await self.get_compose_file_path()
-        if compose_file_path is None:
-            raise FileNotFoundError(
-                f"Could not find docker-compose file for server {self._name}"
-            )
-        return ComposeManager(compose_file_path)
 
     def verify_compose_obj(self, compose_obj: ComposeFile) -> bool:
         """
@@ -150,8 +144,7 @@ class MCInstance:
         return self._parse_player_messages_from_log(log.content), log.pointer
 
     async def get_logs_from_docker(self, tail: int = 1000) -> str:
-        compose_manager = await self.get_compose_manager()
-        return await compose_manager.logs(tail)
+        return await self._compose_manager.logs(tail)
 
     async def create(self, compose_obj: ComposeFile) -> None:
         """
@@ -182,33 +175,24 @@ class MCInstance:
         await compose_obj.async_to_file(compose_file_path)
 
     async def remove(self) -> None:
-        compose_manager = await self.get_compose_manager()
-        if await compose_manager.running():
-            raise RuntimeError(f"Cannot remove server {self._name} while it is running")
-        if await compose_manager.created():
+        if await self._compose_manager.created():
             raise RuntimeError(f"Cannot remove server {self._name} while it is created")
-        compose_file_path = compose_manager.compose_file_path
-        await async_rmtree(compose_file_path.parent)
+        await async_rmtree(self._project_path)
 
     async def up(self) -> None:
-        compose_manager = await self.get_compose_manager()
-        await compose_manager.up_detached()
+        await self._compose_manager.up_detached()
 
     async def down(self) -> None:
-        compose_manager = await self.get_compose_manager()
-        await compose_manager.down()
+        await self._compose_manager.down()
 
     async def start(self) -> None:
-        compose_manager = await self.get_compose_manager()
-        await compose_manager.run_command("start")
+        await self._compose_manager.run_command("start")
 
     async def stop(self) -> None:
-        compose_manager = await self.get_compose_manager()
-        await compose_manager.run_command("stop")
+        await self._compose_manager.run_command("stop")
 
     async def restart(self) -> None:
-        compose_manager = await self.get_compose_manager()
-        await compose_manager.restart()
+        await self._compose_manager.restart()
 
     async def exists(self) -> bool:
         """
@@ -221,16 +205,13 @@ class MCInstance:
         """
         created means that the container has been created but it is not running
         """
-        compose_manager = await self.get_compose_manager()
-        return await compose_manager.created()
+        return await self._compose_manager.created()
 
     async def running(self) -> bool:
-        compose_manager = await self.get_compose_manager()
-        return await compose_manager.running()
+        return await self._compose_manager.running()
 
     async def healthy(self) -> bool:
-        compose_manager = await self.get_compose_manager()
-        return await compose_manager.healthy("mc")
+        return await self._compose_manager.healthy("mc")
 
     async def wait_until_healthy(self) -> None:
         while not await self.healthy():
@@ -294,12 +275,10 @@ class MCInstance:
             we are actually just using rcon-cli provided by itzg/minecraft-server
             to get rid of extra dependencies
         """
-        compose_manager = await self.get_compose_manager()
-        return await compose_manager.exec_command("mc", "rcon-cli", command)
+        return await self._compose_manager.exec_command("mc", "rcon-cli", command)
 
     async def send_command_docker(self, command: str):
         """
         this method will send a command to the server using socat and docker attach
         """
-        compose_manager = await self.get_compose_manager()
-        await compose_manager.send_to_stdin("mc", command)
+        await self._compose_manager.send_to_stdin("mc", command)

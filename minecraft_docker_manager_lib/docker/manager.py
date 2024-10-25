@@ -57,12 +57,17 @@ class DockerComposePsParsed(DockerPsParsed):
 
 
 class ComposeManager:
-    def __init__(self, compose_file_path: str | Path) -> None:
-        self.compose_file_path = Path(compose_file_path)
+    def __init__(self, project_path: str | Path) -> None:
+        self.project_path = Path(project_path)
 
     async def run_command(self, command: str, *args: str) -> str:
         return await run_command(
-            "docker", "compose", "-f", str(self.compose_file_path), command, *args
+            "docker",
+            "compose",
+            "--project-directory",
+            str(self.project_path),
+            command,
+            *args,
         )
 
     async def exec_command(self, service_name: str, command: str, *args: str) -> str:
@@ -75,7 +80,7 @@ class ComposeManager:
         """
         socat_command = [
             "socat",
-            f"EXEC:docker compose -f {self.compose_file_path} attach {service_name},pty",
+            f"EXEC:docker compose --project-directory {self.project_path} attach {service_name},pty",
             "STDIN",
         ]
         socat_process = subprocess.Popen(socat_command, stdin=subprocess.PIPE)

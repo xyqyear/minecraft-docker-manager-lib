@@ -25,7 +25,7 @@ class MCCDockerWrapper:
         self.docker_compose_content = docker_compose_content_template.format(
             username=username, server=server
         )
-        self.compose_manager = ComposeManager(self.docker_compose_path)
+        self.compose_manager = ComposeManager(self.path)
 
     async def create(self):
         await aioos.makedirs(self.path, exist_ok=True)

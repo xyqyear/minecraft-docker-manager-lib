@@ -1,9 +1,8 @@
+import asyncio
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
-from asyncer import asyncify
 from pydantic import BaseModel, Field
 
 from ..utils import run_command
@@ -60,34 +59,22 @@ class ComposeManager:
     def __init__(self, project_path: str | Path) -> None:
         self.project_path = Path(project_path)
 
-    async def run_command(self, command: str, *args: str) -> str:
+    async def run_command(self, command: str) -> str:
         return await run_command(
-            "docker",
-            "compose",
-            "--project-directory",
-            str(self.project_path),
-            command,
-            *args,
+            f"docker compose --project-directory {self.project_path} {command}"
         )
 
-    async def exec_command(self, service_name: str, command: str, *args: str) -> str:
-        return await self.run_command("exec", service_name, command, *args)
+    async def exec_command(self, service_name: str, command: str) -> str:
+        return await self.run_command(f"exec {service_name} {command}")
 
-    @asyncify
-    def send_to_stdin(self, service_name: str, text: str, newline: bool = True):
-        """
-        does not include a newline at the end
-        """
-        socat_command = [
-            "socat",
-            f"EXEC:docker compose --project-directory {self.project_path} attach {service_name},pty",
-            "STDIN",
-        ]
-        socat_process = subprocess.Popen(socat_command, stdin=subprocess.PIPE)
-        socat_process.communicate(input=text.encode() + (b"\n" if newline else b""))
+    async def send_to_stdin(self, service_name: str, text: str):
+        socat_process = await asyncio.create_subprocess_shell(
+            f'echo "{text}" | socat "EXEC:docker compose --project-directory {self.project_path} attach {service_name},pty" STDIN',
+        )
+        await socat_process.wait()
 
     async def up_detached(self):
-        await self.run_command("up", "-d")
+        await self.run_command("up -d")
 
     async def down(self):
         await self.run_command("down")
@@ -99,18 +86,18 @@ class ComposeManager:
         await self.run_command("pull")
 
     async def logs(self, tail: int = 1000) -> str:
-        return await self.run_command("logs", "--tail", str(tail))
+        return await self.run_command(f"logs --tail {tail}")
 
     async def running(self) -> bool:
-        process = await self.run_command("ps", "-q")
+        process = await self.run_command("ps -q")
         return process != ""
 
     async def created(self) -> bool:
-        process = await self.run_command("ps", "--all", "-q")
+        process = await self.run_command("ps --all -q")
         return process != ""
 
     async def ps(self, service_name: str) -> DockerComposePsParsed:
-        output = await self.run_command("ps", "--no-trunc", "--format", "json")
+        output = await self.run_command("ps --no-trunc --format json")
         for line in output.splitlines():
             parsed = DockerComposePsParsed.from_docker_compose_ps(json.loads(line))
             if parsed.service == service_name:
@@ -126,11 +113,12 @@ class ComposeManager:
 
 
 class DockerManager:
-    async def run_command(self, command: str, *args: str) -> str:
-        return await run_command("docker", command, *args, "--format", "json")
+    async def run_command(self, sub_command: str) -> str:
+        # return await run_command("docker", command, *args, "--format", "json")
+        return await run_command(f"docker {sub_command} --format json")
 
     async def ps(self):
-        output = await self.run_command("ps", "--no-trunc")
+        output = await self.run_command("ps --no-trunc")
         return [
             DockerPsParsed.from_docker_ps(json.loads(line))
             for line in output.splitlines()

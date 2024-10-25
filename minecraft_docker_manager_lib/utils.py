@@ -1,21 +1,17 @@
+import asyncio
 import shutil
-import subprocess
 from pathlib import Path
 
-from asyncer import asyncify
+
+async def async_rmtree(path: Path):
+    await asyncio.to_thread(shutil.rmtree, path)
 
 
-@asyncify
-def async_rmtree(path: str | Path):
-    shutil.rmtree(path)
-
-
-@asyncify
-def run_command(*commands: str) -> str:
-    process = subprocess.run(
-        commands,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
+async def run_command(command: str) -> str:
+    process = await asyncio.create_subprocess_shell(
+        command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
-    return process.stdout
+    stdout, stderr = await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f"Failed to run command: {command}\n{stderr.decode()}")
+    return stdout.decode()

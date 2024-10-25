@@ -47,21 +47,17 @@ class MCInstance:
     def get_name(self) -> str:
         return self._name
 
-    @staticmethod
-    async def get_compose_file_path_for_server(
-        _servers_path: str | Path, server_name: str
-    ) -> Path | None:
-        server_path = Path(_servers_path) / server_name
-        if await aioos.path.exists(server_path / "docker-compose.yml"):
-            return server_path / "docker-compose.yml"
-        if await aioos.path.exists(server_path / "docker-compose.yaml"):
-            return server_path / "docker-compose.yaml"
-        return None
+    def get_project_path(self) -> Path:
+        return self._project_path
+
+    def get_compose_manager(self) -> ComposeManager:
+        return self._compose_manager
 
     async def get_compose_file_path(self) -> Path | None:
-        return await self.get_compose_file_path_for_server(
-            self._servers_path, self._name
-        )
+        if await aioos.path.exists(self._project_path / "docker-compose.yml"):
+            return self._project_path / "docker-compose.yml"
+        if await aioos.path.exists(self._project_path / "docker-compose.yaml"):
+            return self._project_path / "docker-compose.yaml"
 
     def verify_compose_obj(self, compose_obj: ComposeFile) -> bool:
         """
@@ -92,7 +88,12 @@ class MCInstance:
         return False
 
     async def get_compose_obj(self) -> ComposeFile:
-        compose_obj = await ComposeFile.async_from_file(self._servers_path)
+        compose_file_path = await self.get_compose_file_path()
+        if compose_file_path is None:
+            raise FileNotFoundError(
+                f"Could not find docker-compose file for server {self._name}"
+            )
+        compose_obj = await ComposeFile.async_from_file(compose_file_path)
 
         if self.verify_compose_obj(compose_obj):
             return compose_obj
@@ -102,7 +103,7 @@ class MCInstance:
         )
 
     def _get_log_path(self) -> Path:
-        return self._servers_path / self._name / "data" / "logs" / "latest.log"
+        return self._project_path / "data" / "logs" / "latest.log"
 
     async def get_log_file_end_pointer(self) -> int:
         async with aiofiles.open(self._get_log_path(), mode="r", encoding="utf8") as f:
@@ -155,16 +156,18 @@ class MCInstance:
         if not self.verify_compose_obj(compose_obj):
             raise ValueError("Invalid compose file")
 
-        await aioos.makedirs(self._servers_path / self._name, exist_ok=True)
+        await aioos.makedirs(self._project_path, exist_ok=True)
         if await self.get_compose_file_path() is not None:
             raise FileExistsError(
                 f"docker-compose file already exists for server {self._name}"
             )
-        compose_file_path = self._servers_path / self._name / "docker-compose.yml"
+        compose_file_path = self._project_path / "docker-compose.yml"
         await compose_obj.async_to_file(compose_file_path)
-        await aioos.makedirs(self._servers_path / self._name / "data", exist_ok=True)
+        await aioos.makedirs(self._project_path / "data", exist_ok=True)
 
     async def update_compose_file(self, compose_obj: ComposeFile) -> None:
+        if await self.created():
+            raise RuntimeError(f"Cannot update server {self._name} while it is created")
         if not self.verify_compose_obj(compose_obj):
             raise ValueError("Invalid compose file")
 
@@ -215,6 +218,8 @@ class MCInstance:
         return await self._compose_manager.healthy("mc")
 
     async def wait_until_healthy(self) -> None:
+        if not await self.running():
+            raise RuntimeError(f"Server {self._name} is not running")
         while not await self.healthy():
             await asyncio.sleep(0.5)
 
@@ -277,7 +282,7 @@ class MCInstance:
             we are actually just using rcon-cli provided by itzg/minecraft-server
             to get rid of extra dependencies
         """
-        return await self._compose_manager.exec_command("mc", "rcon-cli", command)
+        return await self._compose_manager.exec_command("mc", f"rcon-cli {command}")
 
     async def send_command_docker(self, command: str):
         """

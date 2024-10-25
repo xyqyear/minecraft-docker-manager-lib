@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "minecraft-docker-manager-lib"
-version = "0.0.1-dev"
+version = "0.0.1"
 description = "A manager lib for Minecraft server in Docker container"
 authors = ["xyqyear <xyqyear@gmail.com>"]
 readme = "README.md"
@@ -9,11 +9,10 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-ruamel-yaml = "^0.18.6"
 aiofiles = "^24.1.0"
 pydantic = "^2.9.2"
 pydantic-settings = "^2.5.2"
-asyncer = "^0.0.8"
+pyyaml = "^6.0.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"

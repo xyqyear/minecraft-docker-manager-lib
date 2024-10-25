@@ -2,13 +2,11 @@ import re
 from pathlib import Path
 from typing import Any, Self
 
-from asyncer import asyncify
+import aiofiles
+import yaml
 from pydantic import model_validator
-from ruamel.yaml import YAML
 
 from .compose_models import ComposeSpecification, Ports, Volumes
-
-yaml = YAML()
 
 
 def convert_str_port_to_obj(port: float | str) -> Ports:
@@ -73,22 +71,25 @@ class ComposeFile(ComposeSpecification):
     @classmethod
     def from_file(cls, file_path: str | Path) -> "ComposeFile":
         with open(file_path, "r", encoding="utf8") as file:
-            return cls.from_dict(yaml.load(file))  # type: ignore
+            return cls.from_dict(yaml.load(file, Loader=yaml.CLoader))
 
     @classmethod
     async def async_from_file(cls, file_path: str | Path) -> "ComposeFile":
-        return await asyncify(cls.from_file)(file_path)
+        async with aiofiles.open(file_path, "r", encoding="utf8") as file:
+            return cls.from_dict(yaml.load(await file.read(), Loader=yaml.CLoader))
 
     def to_dict(self) -> dict[Any, Any]:
         return self.model_dump(exclude_none=True)
 
     def to_file(self, file_path: str | Path) -> None:
         with open(file_path, "w", encoding="utf8") as file:
-            yaml.dump(self.to_dict(), file)  # type: ignore
+            yaml.dump(self.to_dict(), stream=file, Dumper=yaml.CDumper, sort_keys=False)
 
-    @asyncify
-    def async_to_file(self, file_path: str | Path) -> None:
-        self.to_file(file_path)
+    async def async_to_file(self, file_path: str | Path) -> None:
+        async with aiofiles.open(file_path, "w", encoding="utf8") as file:
+            await file.write(
+                yaml.dump(self.to_dict(), Dumper=yaml.CDumper, sort_keys=False)
+            )
 
     @model_validator(mode="after")
     def expand_services(self) -> Self:

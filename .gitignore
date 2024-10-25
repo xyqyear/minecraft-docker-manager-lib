@@ -3,3 +3,5 @@ data/
 .pytest*
 __pycache__
 *.ipynb
+.coverage
+cov.xml

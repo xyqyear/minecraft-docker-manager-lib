@@ -280,8 +280,7 @@ class MCInstance:
         )
 
     async def list_players(self) -> list[str]:
-        compose_manager = await self.get_compose_manager()
-        players = await compose_manager.exec_command("mc", "rcon-cli", "list")
+        players = await self.send_command_rcon("list")
         if ":" not in players:
             return []
         players_str = players.split(":")[1].strip()

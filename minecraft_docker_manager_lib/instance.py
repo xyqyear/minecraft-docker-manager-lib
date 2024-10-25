@@ -2,6 +2,7 @@ import asyncio
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import aiofiles
 import aiofiles.os as aioos
@@ -232,6 +233,7 @@ class MCInstance:
         ), "Could not find service mc in compose file"
         environment = compose_mc_service.environment
         assert type(environment) is dict, "Invalid environment in compose file"
+        environment = cast(dict[str, str], environment)
         game_version = environment.get("VERSION")
         assert game_version is not None, "Could not find game version in compose file"
         assert type(game_version) is str

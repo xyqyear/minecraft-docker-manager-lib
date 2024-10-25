@@ -6,9 +6,7 @@ import aiofiles.os as aioos
 import pytest
 import pytest_asyncio
 
-from minecraft_docker_manager_lib.docker.compose_file import ComposeFile
-from minecraft_docker_manager_lib.instance import MCPlayerMessage
-from minecraft_docker_manager_lib.manager import DockerMCManager
+from minecraft_docker_manager_lib import ComposeFile, DockerMCManager, MCPlayerMessage
 from minecraft_docker_manager_lib.utils import async_rmtree, run_command
 
 from .mcc_docker_wrapper import MCCDockerWrapper

@@ -27,8 +27,8 @@ class LogType:
 class MCServerInfo:
     name: str
     game_version: str
-    game_port: str | int
-    rcon_port: str | int
+    game_port: str
+    rcon_port: str
 
 
 @dataclass
@@ -263,8 +263,8 @@ class MCInstance:
         return MCServerInfo(
             name=self._name,
             game_version=game_version,
-            game_port=game_port,
-            rcon_port=rcon_port,
+            game_port=str(game_port),
+            rcon_port=str(rcon_port),
         )
 
     async def list_players(self) -> list[str]:

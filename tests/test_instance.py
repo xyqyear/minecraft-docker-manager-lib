@@ -15,19 +15,19 @@ async def test_minecraft_instance(teardown: list[str]):
     assert await server1.get_server_info() == MCServerInfo(
         name="testserver1",
         game_version="1.20.4",
-        game_port="34544",
-        rcon_port="34545",
+        game_port=34544,
+        rcon_port=34545,
     )
     compose_obj = await server1.get_compose_obj()
     ports = compose_obj.services["mc"].ports
     for port in ports:
-        if port.target == "25565":
+        if str(port.target) == "25565":
             port.published = "34546"
             break
     await server1.update_compose_file(compose_obj)
     assert await server1.get_server_info() == MCServerInfo(
         name="testserver1",
         game_version="1.20.4",
-        game_port="34546",
-        rcon_port="34545",
+        game_port=34546,
+        rcon_port=34545,
     )

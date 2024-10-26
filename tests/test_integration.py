@@ -6,7 +6,12 @@ import aiofiles.os as aioos
 import pytest
 import pytest_asyncio
 
-from minecraft_docker_manager_lib import ComposeFile, DockerMCManager, MCPlayerMessage
+from minecraft_docker_manager_lib import (
+    ComposeFile,
+    DockerMCManager,
+    MCPlayerMessage,
+    MCServerInfo,
+)
 from minecraft_docker_manager_lib.utils import async_rmtree, run_command
 
 from .mcc_docker_wrapper import MCCDockerWrapper
@@ -64,7 +69,7 @@ async def teardown():
 
 
 @pytest.mark.asyncio
-async def test_instance(teardown: list[str]):
+async def test_integration(teardown: list[str]):
     # setting up
     docker_mc_manager = DockerMCManager(TEST_ROOT_PATH)
 
@@ -94,6 +99,22 @@ async def test_instance(teardown: list[str]):
         [
             TEST_ROOT_PATH / "testserver1/docker-compose.yml",
             TEST_ROOT_PATH / "testserver2/docker-compose.yml",
+        ]
+    )
+    assert set(await docker_mc_manager.get_all_server_info()) == set(
+        [
+            MCServerInfo(
+                name="testserver1",
+                game_version="1.20.4",
+                game_port=34544,
+                rcon_port=34544 + 1,
+            ),
+            MCServerInfo(
+                name="testserver2",
+                game_version="1.20.4",
+                game_port=34554,
+                rcon_port=34554 + 1,
+            ),
         ]
     )
     assert set(await docker_mc_manager.get_running_server_names()) == set()

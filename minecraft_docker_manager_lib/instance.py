@@ -23,12 +23,12 @@ class LogType:
     pointer: int
 
 
-@dataclass
+@dataclass(frozen=True)
 class MCServerInfo:
     name: str
     game_version: str
-    game_port: str
-    rcon_port: str
+    game_port: int
+    rcon_port: int
 
 
 @dataclass
@@ -263,8 +263,8 @@ class MCInstance:
         return MCServerInfo(
             name=self._name,
             game_version=game_version,
-            game_port=str(game_port),
-            rcon_port=str(rcon_port),
+            game_port=int(game_port),
+            rcon_port=int(rcon_port),
         )
 
     async def list_players(self) -> list[str]:

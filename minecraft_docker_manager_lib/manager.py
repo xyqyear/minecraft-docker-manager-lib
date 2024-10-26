@@ -7,7 +7,7 @@ from aiofiles import os as aioos
 from .docker.compose_file import ComposeFile
 from .docker.compose_models import Service
 from .docker.manager import DockerManager
-from .instance import MCInstance
+from .instance import MCInstance, MCServerInfo
 
 
 class DockerMCManager:
@@ -53,11 +53,14 @@ class DockerMCManager:
             for compose_obj in compose_obj_list
         ]
 
-    async def get_all_server_compose_paths(self) -> list[Path]:
-        instances = [
+    async def get_all_instances(self) -> list[MCInstance]:
+        return [
             MCInstance(self.servers_path, server_name)
             for server_name in await self.get_all_server_names()
         ]
+
+    async def get_all_server_compose_paths(self) -> list[Path]:
+        instances = await self.get_all_instances()
         compose_path_coroutine_list = [
             instance.get_compose_file_path() for instance in instances
         ]
@@ -66,6 +69,13 @@ class DockerMCManager:
             for compose_path in await asyncio.gather(*compose_path_coroutine_list)
             if compose_path is not None
         ]
+
+    async def get_all_server_info(self) -> list[MCServerInfo]:
+        instances = await self.get_all_instances()
+        server_info_coroutine_list = [
+            instance.get_server_info() for instance in instances
+        ]
+        return await asyncio.gather(*server_info_coroutine_list)
 
     async def get_running_server_names(self):
         """

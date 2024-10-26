@@ -91,6 +91,7 @@ async def test_integration(teardown: list[str]):
     server2_compose_obj = create_mc_server_compose_obj("testserver2", 34554, 34554 + 1)
     server1_create_coroutine = server1.create(server1_compose_obj)
     server2_create_coroutine = server2.create(server2_compose_obj)
+    await aioos.makedirs(TEST_ROOT_PATH / "irrelevant_dir", exist_ok=True)
     await asyncio.gather(server1_create_coroutine, server2_create_coroutine)
     assert set(await docker_mc_manager.get_all_server_names()) == set(
         ["testserver1", "testserver2"]

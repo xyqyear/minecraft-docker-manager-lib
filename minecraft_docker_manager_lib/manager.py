@@ -37,11 +37,14 @@ class DockerMCManager:
         raise ValueError("Could not find server name in compose file")
 
     async def get_all_server_compose_obj(self) -> list[ComposeFile]:
-        compose_obj_coroutines = [
-            MCInstance(self.servers_path, sub_dir).get_compose_obj()
-            for sub_dir in await aioos.listdir(self.servers_path)
-        ]
-        return await asyncio.gather(*compose_obj_coroutines)
+        compose_obj_list = list[ComposeFile]()
+        for sub_dir in await aioos.listdir(self.servers_path):
+            instance = self.get_instance(sub_dir)
+            try:
+                compose_obj_list.append(await instance.get_compose_obj())
+            except FileNotFoundError:
+                continue
+        return compose_obj_list
 
     async def get_all_server_names(self) -> list[str]:
         """
@@ -55,7 +58,7 @@ class DockerMCManager:
 
     async def get_all_instances(self) -> list[MCInstance]:
         return [
-            MCInstance(self.servers_path, server_name)
+            self.get_instance(server_name)
             for server_name in await self.get_all_server_names()
         ]
 

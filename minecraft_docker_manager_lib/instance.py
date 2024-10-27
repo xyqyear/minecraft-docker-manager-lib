@@ -282,6 +282,8 @@ class MCInstance:
             we are actually just using rcon-cli provided by itzg/minecraft-server
             to get rid of extra dependencies
         """
+        if not await self.healthy():
+            raise RuntimeError(f"Server {self._name} is not healthy")
         return await self._compose_manager.exec_command("mc", f"rcon-cli {command}")
 
     async def send_command_docker(self, command: str):

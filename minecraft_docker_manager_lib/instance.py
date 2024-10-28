@@ -131,7 +131,8 @@ class MCInstance:
             log = await f.read()
             return LogType(content=log, pointer=await f.tell())
 
-    def _parse_player_messages_from_log(self, log: str) -> list[MCPlayerMessage]:
+    @staticmethod
+    def parse_player_messages_from_log(log: str) -> list[MCPlayerMessage]:
         return [
             MCPlayerMessage(
                 player=match.group("player"), message=match.group("message")
@@ -143,7 +144,7 @@ class MCInstance:
         self, start: int = 0
     ) -> tuple[list[MCPlayerMessage], int]:
         log = await self.get_logs_from_file(start)
-        return self._parse_player_messages_from_log(log.content), log.pointer
+        return self.parse_player_messages_from_log(log.content), log.pointer
 
     async def get_logs_from_docker(self, tail: int = 1000) -> str:
         return await self._compose_manager.logs(tail)

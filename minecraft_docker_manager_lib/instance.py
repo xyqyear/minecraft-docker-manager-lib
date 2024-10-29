@@ -292,4 +292,5 @@ class MCInstance:
         """
         this method will send a command to the server using socat and docker attach
         """
+        command = command.replace("\\", "\\\\").replace('"', '\\"')
         await self._compose_manager.send_to_stdin("mc", command)

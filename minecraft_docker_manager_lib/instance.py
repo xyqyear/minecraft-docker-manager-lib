@@ -285,7 +285,7 @@ class MCInstance:
         """
         if not await self.healthy():
             raise RuntimeError(f"Server {self._name} is not healthy")
-        command = command.replace('"', '\\"')
+        command = command.replace('"', '\\"').replace("\\", "\\\\")
         return await self._compose_manager.exec_command("mc", f"rcon-cli {command}")
 
     async def send_command_docker(self, command: str):

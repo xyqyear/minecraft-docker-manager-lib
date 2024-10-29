@@ -65,9 +65,12 @@ class ComposeManager:
         )
 
     async def exec_command(self, service_name: str, command: str) -> str:
+        command = command.replace("\\", "\\\\").replace('"', '\\"')
         return await self.run_command(f"exec {service_name} {command}")
 
     async def send_to_stdin(self, service_name: str, text: str):
+        # apparently, create_subprocess_shell is going to eat another escape
+        text = text.replace("\\", "\\\\\\\\").replace('"', '\\"')
         socat_process = await asyncio.create_subprocess_shell(
             f'echo "{text}" | socat "EXEC:docker compose --project-directory {self.project_path} attach {service_name},pty" STDIN',
         )

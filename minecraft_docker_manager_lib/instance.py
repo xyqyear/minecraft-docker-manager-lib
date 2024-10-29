@@ -285,12 +285,10 @@ class MCInstance:
         """
         if not await self.healthy():
             raise RuntimeError(f"Server {self._name} is not healthy")
-        command = command.replace("\\", "\\\\").replace('"', '\\"')
         return await self._compose_manager.exec_command("mc", f"rcon-cli {command}")
 
     async def send_command_docker(self, command: str):
         """
         this method will send a command to the server using socat and docker attach
         """
-        command = command.replace("\\", "\\\\").replace('"', '\\"')
         await self._compose_manager.send_to_stdin("mc", command)

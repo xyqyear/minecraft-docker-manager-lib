@@ -1,4 +1,3 @@
-import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -55,6 +54,10 @@ class DockerComposePsParsed(DockerPsParsed):
         return cls(**data)
 
 
+def sanitize_command(command: str) -> str:
+    return command
+
+
 class ComposeManager:
     def __init__(self, project_path: str | Path) -> None:
         self.project_path = Path(project_path)
@@ -65,16 +68,23 @@ class ComposeManager:
         )
 
     async def exec_command(self, service_name: str, command: str) -> str:
-        command = command.replace("\\", "\\\\").replace('"', '\\"')
+        command = (
+            command.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("$", "\\$")
+            .replace("<", "\\<")
+            .replace(">", "\\>")
+        )
         return await self.run_command(f"exec {service_name} {command}")
 
     async def send_to_stdin(self, service_name: str, text: str):
         # apparently, create_subprocess_shell is going to eat another escape
-        text = text.replace("\\", "\\\\\\\\").replace('"', '\\"')
-        socat_process = await asyncio.create_subprocess_shell(
+        # and we don't need to escape < and >
+        text = text.replace("\\", "\\\\\\\\").replace('"', '\\"').replace("$", "\\$")
+        await run_command(
             f'echo "{text}" | socat "EXEC:docker compose --project-directory {self.project_path} attach {service_name},pty" STDIN',
+            catch_output=False,
         )
-        await socat_process.wait()
 
     async def up_detached(self):
         await self.run_command("up -d")

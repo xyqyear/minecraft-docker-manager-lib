@@ -274,7 +274,7 @@ class MCInstance:
         players = await self.send_command_rcon("list")
         if ":" not in players:
             return []
-        players_str = ansi_escape_pattern.sub("", players.split(":")[1]).strip()
+        players_str = players.split(":")[1].strip()
         return [
             player.strip() for player in players_str.split(",") if player.strip() != ""
         ]
@@ -287,7 +287,8 @@ class MCInstance:
         """
         if not await self.healthy():
             raise RuntimeError(f"Server {self._name} is not healthy")
-        return await self._compose_manager.exec_command("mc", f"rcon-cli {command}")
+        result = await self._compose_manager.exec_command("mc", f"rcon-cli {command}")
+        return ansi_escape_pattern.sub("", result).strip()
 
     async def send_command_docker(self, command: str):
         """

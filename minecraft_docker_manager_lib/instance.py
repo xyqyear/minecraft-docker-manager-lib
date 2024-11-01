@@ -16,6 +16,8 @@ player_message_pattern = re.compile(
     r"\]: (?:\[Not Secure\] )?<(?P<player>.*?)> (?P<message>.*)"
 )
 
+ansi_escape_pattern = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
 
 @dataclass
 class LogType:
@@ -272,7 +274,7 @@ class MCInstance:
         players = await self.send_command_rcon("list")
         if ":" not in players:
             return []
-        players_str = players.split(":")[1].strip()
+        players_str = ansi_escape_pattern.sub("", players.split(":")[1]).strip()
         return [
             player.strip() for player in players_str.split(",") if player.strip() != ""
         ]

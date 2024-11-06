@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ..utils import run_command
+from ..utils import exec_command, run_shell_command
 
 
 class DockerPsParsed(BaseModel):
@@ -62,55 +62,61 @@ class ComposeManager:
     def __init__(self, project_path: str | Path) -> None:
         self.project_path = Path(project_path)
 
-    async def run_command(self, command: str) -> str:
-        return await run_command(
-            f"docker compose --project-directory {self.project_path} {command}"
+    async def run_compose_command(self, *args: str) -> str:
+        return await exec_command(
+            "docker",
+            "compose",
+            "--project-directory",
+            str(self.project_path),
+            *args,
         )
 
-    async def exec_command(self, service_name: str, command: str) -> str:
-        command = (
-            command.replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("$", "\\$")
-            .replace("<", "\\<")
-            .replace(">", "\\>")
-        )
-        return await self.run_command(f"exec {service_name} {command}")
+    async def exec(self, service_name: str, *args: str) -> str:
+        return await self.run_compose_command("exec", service_name, *args)
 
     async def send_to_stdin(self, service_name: str, text: str):
+        """
+        Deprecated, used in tests only.
+        """
         # apparently, create_subprocess_shell is going to eat another escape
         # and we don't need to escape < and >
         text = text.replace("\\", "\\\\\\\\").replace('"', '\\"').replace("$", "\\$")
-        await run_command(
+        await run_shell_command(
             f'echo "{text}" | socat "EXEC:docker compose --project-directory {self.project_path} attach {service_name},pty" STDIN',
             catch_output=False,
         )
 
     async def up_detached(self):
-        await self.run_command("up -d")
+        await self.run_compose_command("up", "-d")
 
     async def down(self):
-        await self.run_command("down")
+        await self.run_compose_command("down")
+
+    async def stop(self):
+        await self.run_compose_command("stop")
+
+    async def start(self):
+        await self.run_compose_command("start")
 
     async def restart(self):
-        await self.run_command("restart")
+        await self.run_compose_command("restart")
 
     async def pull(self):
-        await self.run_command("pull")
+        await self.run_compose_command("pull")
 
     async def logs(self, tail: int = 1000) -> str:
-        return await self.run_command(f"logs --tail {tail}")
+        return await self.run_compose_command("logs", "--tail", str(tail))
 
     async def running(self) -> bool:
-        process = await self.run_command("ps -q")
+        process = await self.run_compose_command("ps", "-q")
         return process != ""
 
     async def created(self) -> bool:
-        process = await self.run_command("ps --all -q")
+        process = await self.run_compose_command("ps", "--all", "-q")
         return process != ""
 
     async def ps(self, service_name: str) -> DockerComposePsParsed:
-        output = await self.run_command("ps --no-trunc --format json")
+        output = await self.run_compose_command("ps", "--no-trunc", "--format", "json")
         for line in output.splitlines():
             parsed = DockerComposePsParsed.from_docker_compose_ps(json.loads(line))
             if parsed.service == service_name:
@@ -126,12 +132,12 @@ class ComposeManager:
 
 
 class DockerManager:
-    async def run_command(self, sub_command: str) -> str:
+    async def run_command(self, *args: str) -> str:
         # return await run_command("docker", command, *args, "--format", "json")
-        return await run_command(f"docker {sub_command} --format json")
+        return await exec_command("docker", *args, "--format", "json")
 
     async def ps(self):
-        output = await self.run_command("ps --no-trunc")
+        output = await self.run_command("ps", "--no-trunc")
         return [
             DockerPsParsed.from_docker_ps(json.loads(line))
             for line in output.splitlines()

@@ -26,3 +26,7 @@ pytest-cov = "^5.0.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "-vv --cov=minecraft_docker_manager_lib --cov-report=xml:cov.xml --cov-report=html:cov_html --cov-report=term-missing"

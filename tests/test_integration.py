@@ -12,7 +12,7 @@ from minecraft_docker_manager_lib import (
     MCPlayerMessage,
     MCServerInfo,
 )
-from minecraft_docker_manager_lib.utils import async_rmtree, run_command
+from minecraft_docker_manager_lib.utils import async_rmtree, run_shell_command
 
 from .mcc_docker_wrapper import MCCDockerWrapper
 
@@ -64,7 +64,7 @@ async def teardown():
     containers_to_remove = list[str]()
     yield containers_to_remove
     for container_name in containers_to_remove:
-        await run_command(f"docker rm -f {container_name}")
+        await run_shell_command(f"docker rm -f {container_name}")
     await async_rmtree(TEST_ROOT_PATH)
 
 
@@ -158,6 +158,7 @@ async def test_integration(teardown: list[str]):
     assert await server1.list_players() == []
 
     await client1.create()
+    await client1.compose_manager.run_compose_command("pull")
     await client1.up()
     await client1.wait_until_connected()
     await asyncio.sleep(1)

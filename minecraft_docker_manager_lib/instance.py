@@ -12,11 +12,10 @@ from .docker.compose_models import Ports
 from .docker.manager import ComposeManager
 from .utils import async_rmtree
 
-player_message_pattern = re.compile(
+PLAYER_MESSAGE_PATTERN = re.compile(
     r"\]: (?:\[Not Secure\] )?<(?P<player>.*?)> (?P<message>.*)"
 )
-
-ansi_escape_pattern = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 
 @dataclass
@@ -139,7 +138,7 @@ class MCInstance:
             MCPlayerMessage(
                 player=match.group("player"), message=match.group("message")
             )
-            for match in player_message_pattern.finditer(log)
+            for match in PLAYER_MESSAGE_PATTERN.finditer(log)
         ]
 
     async def get_player_messages_from_log(
@@ -193,10 +192,10 @@ class MCInstance:
         await self._compose_manager.down()
 
     async def start(self) -> None:
-        await self._compose_manager.run_command("start")
+        await self._compose_manager.start()
 
     async def stop(self) -> None:
-        await self._compose_manager.run_command("stop")
+        await self._compose_manager.stop()
 
     async def restart(self) -> None:
         await self._compose_manager.restart()
@@ -219,6 +218,12 @@ class MCInstance:
 
     async def healthy(self) -> bool:
         return await self._compose_manager.healthy("mc")
+
+    async def paused(self) -> bool:
+        mc_health_result = await self._compose_manager.exec("mc", "mc-health")
+        if "Java process suspended by Autopause function" in mc_health_result:
+            return True
+        return False
 
     async def wait_until_healthy(self) -> None:
         if not await self.running():
@@ -287,11 +292,13 @@ class MCInstance:
         """
         if not await self.healthy():
             raise RuntimeError(f"Server {self._name} is not healthy")
-        result = await self._compose_manager.exec_command("mc", f"rcon-cli {command}")
-        return ansi_escape_pattern.sub("", result).strip()
+        result = await self._compose_manager.exec("mc", "rcon-cli", command)
+        return ANSI_ESCAPE_PATTERN.sub("", result).strip()
 
-    async def send_command_docker(self, command: str):
+    async def send_command_stdin(self, command: str):
         """
-        this method will send a command to the server using socat and docker attach
+        this method will send a command to the server using mc-send-to-console
         """
-        await self._compose_manager.send_to_stdin("mc", command)
+        if not await self.healthy():
+            raise RuntimeError(f"Server {self._name} is not healthy")
+        await self._compose_manager.exec("mc", "mc-send-to-console", command)

@@ -76,9 +76,7 @@ class MCInstance:
                 continue
             if service.container_name != f"mc-{self._name}":
                 continue
-            if service.image is None or not service.image.startswith(
-                "itzg/minecraft-server"
-            ):
+            if service.image is None or "itzg/minecraft-server" not in service.image:
                 continue
             if service.ports is None:
                 continue

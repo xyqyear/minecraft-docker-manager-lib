@@ -55,16 +55,29 @@ class MCInstance:
         return self._compose_manager
 
     async def get_compose_file_path(self) -> Path | None:
-        if await aioos.path.exists(self._project_path / "docker-compose.yml"):
-            return self._project_path / "docker-compose.yml"
-        if await aioos.path.exists(self._project_path / "docker-compose.yaml"):
-            return self._project_path / "docker-compose.yaml"
+        candidates = [
+            self._project_path / "docker-compose.yml",
+            self._project_path / "docker-compose.yaml",
+            self._project_path / "compose.yml",
+            self._project_path / "compose.yaml"
+        ]
+        
+        existence_checks = await asyncio.gather(
+            *[aioos.path.exists(path) for path in candidates],
+            return_exceptions=True
+        )
+        
+        for path, exists in zip(candidates, existence_checks):
+            if exists is True:
+                return path
+        
+        return None
 
     def verify_compose_obj(self, compose_obj: ComposeFile) -> bool:
         """
         a docker minecraft server must meet the following requirements:
-        - have a docker-compose file
-        - the docker-compose file must have a service named "mc"
+        - have a compose.yaml file
+        - compose.yaml must have a service named "mc"
             - container name must be "mc-<self._name>"
             - this service must use the image "itzg/minecraft-server"
             - this service must have a port mapping to 25565
@@ -90,7 +103,7 @@ class MCInstance:
         compose_file_path = await self.get_compose_file_path()
         if compose_file_path is None:
             raise FileNotFoundError(
-                f"Could not find docker-compose file for server {self._name}"
+                f"Could not find compose.yaml for server {self._name}"
             )
         compose_obj = await ComposeFile.async_from_file(compose_file_path)
 
@@ -98,7 +111,7 @@ class MCInstance:
             return compose_obj
 
         raise FileNotFoundError(
-            f"Could not find valid docker-compose file for server {self._name}"
+            f"Could not find valid compose.yaml file for server {self._name}"
         )
 
     def _get_log_path(self) -> Path:
@@ -159,9 +172,9 @@ class MCInstance:
         await aioos.makedirs(self._project_path, exist_ok=True)
         if await self.get_compose_file_path() is not None:
             raise FileExistsError(
-                f"docker-compose file already exists for server {self._name}"
+                f"compose.yaml already exists for server {self._name}"
             )
-        compose_file_path = self._project_path / "docker-compose.yml"
+        compose_file_path = self._project_path / "compose.yaml"
         await compose_obj.async_to_file(compose_file_path)
         await aioos.makedirs(self._project_path / "data", exist_ok=True)
 
@@ -174,7 +187,7 @@ class MCInstance:
         compose_file_path = await self.get_compose_file_path()
         if compose_file_path is None:
             raise FileNotFoundError(
-                f"Could not find docker-compose file for server {self._name}"
+                f"Could not find compose.yaml for server {self._name}"
             )
         await compose_obj.async_to_file(compose_file_path)
 

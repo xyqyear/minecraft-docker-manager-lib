@@ -2,13 +2,13 @@ import asyncio
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 import aiofiles
 import aiofiles.os as aioos
 
-from .docker.compose_file import ComposeFile, Ports
+from .docker.compose_file import ComposeFile
 from .docker.manager import ComposeManager
+from .mc_compose_file import MCComposeFile
 from .utils import async_rmtree
 
 PLAYER_MESSAGE_PATTERN = re.compile(
@@ -74,29 +74,19 @@ class MCInstance:
 
     def verify_compose_obj(self, compose_obj: ComposeFile) -> bool:
         """
-        a docker minecraft server must meet the following requirements:
-        - have a compose.yaml file
-        - compose.yaml must have a service named "mc"
-            - container name must be "mc-<self._name>"
-            - this service must use the image "itzg/minecraft-server"
-            - this service must have a port mapping to 25565
+        验证compose文件是否符合Minecraft服务器要求
+        
+        MCComposeFile初始化会验证所有基本要求，
+        成功后只需检查服务器名称是否匹配。
         """
-        if compose_obj.services is None:  # type: ignore
+        try:
+            mc_compose = MCComposeFile(compose_obj)
+            # MCComposeFile初始化成功 = 格式验证通过
+            # get_server_name()不会抛出异常，因为容器名格式已验证
+            return mc_compose.get_server_name() == self._name
+        except ValueError:
+            # 只有MCComposeFile初始化可能失败
             return False
-        for service_name, service in compose_obj.services.items():  # type: ignore
-            if service_name != "mc":
-                continue
-            if service.container_name != f"mc-{self._name}":
-                continue
-            if service.image is None or "itzg/minecraft-server" not in service.image:
-                continue
-            if service.ports is None:
-                continue
-            for port in service.ports:
-                if isinstance(port, Ports):
-                    if str(port.target) == "25565":
-                        return True
-        return False
 
     async def get_compose_obj(self) -> ComposeFile:
         compose_file_path = await self.get_compose_file_path()
@@ -243,46 +233,20 @@ class MCInstance:
 
     async def get_server_info(self):
         """
-        this method will return parsed compose file data
+        获取服务器信息
+        
+        使用MCComposeFile进行强类型访问，一旦MCComposeFile创建成功，
+        就意味着所有必需的字段都已经验证并且类型正确。
         """
         compose_obj = await self.get_compose_obj()
-
-        assert (
-            compose_obj.services is not None
-        ), "Could not find services in compose file"
-        compose_mc_service = compose_obj.services.get("mc")
-        assert (
-            compose_mc_service is not None
-        ), "Could not find service mc in compose file"
-        environment = compose_mc_service.environment
-        assert type(environment) is dict, "Invalid environment in compose file"
-        environment = cast(dict[str, str], environment)
-        game_version = environment.get("VERSION")
-        assert game_version is not None, "Could not find game version in compose file"
-        assert type(game_version) is str
-
-        ports = compose_mc_service.ports
-        assert ports is not None, "Could not find ports in compose file"
-        game_port = None
-        rcon_port = None
-
-        for port in ports:
-            assert type(port) is Ports, "Something must be very wrong"
-            if str(port.target) == "25565":
-                game_port = port.published
-                continue
-            if str(port.target) == "25575":
-                rcon_port = port.published
-                continue
-
-        assert game_port is not None, "Could not find game port in compose file"
-        assert rcon_port is not None, "Could not find rcon port in compose file"
-
+        mc_compose = MCComposeFile(compose_obj)  # 完成所有验证和类型转换
+        
+        # 此时可以安全地调用强类型方法，无需额外的类型检查
         return MCServerInfo(
-            name=self._name,
-            game_version=game_version,
-            game_port=int(game_port),
-            rcon_port=int(rcon_port),
+            name=mc_compose.get_server_name(),
+            game_version=mc_compose.get_game_version(),
+            game_port=mc_compose.get_game_port(),
+            rcon_port=mc_compose.get_rcon_port(),
         )
 
     async def list_players(self) -> list[str]:

@@ -1,11 +1,12 @@
+#pyright: reportUnusedImport=false
 import pytest
 
-from minecraft_docker_manager_lib import DockerMCManager, MCServerInfo
+from minecraft_docker_manager_lib import DockerMCManager, MCComposeFile, MCServerInfo
 
 from .test_integration import (
     TEST_ROOT_PATH,
     create_mc_server_compose_obj,
-    teardown,  # type:ignore
+    teardown,
 )
 
 
@@ -23,12 +24,18 @@ async def test_minecraft_instance(teardown: list[str]):
         rcon_port=34545,
     )
     compose_obj = await server1.get_compose_obj()
-    ports = compose_obj.services["mc"].ports  # type:ignore
-    for port in ports:  # type:ignore
-        if str(port.target) == "25565":  # type:ignore
-            port.published = "34546"  # type:ignore
+    # 使用MCComposeFile进行强类型访问和修改
+    mc_compose = MCComposeFile(compose_obj)
+    
+    # 修改游戏端口
+    for port in mc_compose.mc_service["ports"]:
+        if str(port.target) == "25565":
+            port.published = "34546"
             break
-    await server1.update_compose_file(compose_obj)
+    
+    # 转换回ComposeFile进行保存
+    updated_compose_obj = mc_compose.to_compose_file()
+    await server1.update_compose_file(updated_compose_obj)
     assert await server1.get_server_info() == MCServerInfo(
         name="testserver1",
         game_version="1.20.4",

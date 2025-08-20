@@ -1,12 +1,12 @@
 import asyncio
 from pathlib import Path
-from typing import cast
 
 from aiofiles import os as aioos
 
-from .docker.compose_file import ComposeFile, Service
+from .docker.compose_file import ComposeFile
 from .docker.manager import DockerManager
 from .instance import MCInstance, MCServerInfo
+from .mc_compose_file import MCComposeFile
 
 
 class DockerMCManager:
@@ -14,26 +14,24 @@ class DockerMCManager:
         self.servers_path = Path(servers_path)
 
     @staticmethod
-    def parse_server_name_from_compose_obj(
-        compose_obj: ComposeFile, verify: bool = True
-    ) -> str:
+    def parse_server_name_from_compose_obj(compose_obj: ComposeFile) -> str:
         """
-        raises:
-            ValueError: if the server name is not found in the compose file
+        解析服务器名称，使用MCComposeFile的强类型访问
+
+        Args:
+            compose_obj: ComposeFile对象
+
+        Returns:
+            服务器名称
+
+        Raises:
+            ValueError: 如果服务器名称未找到
         """
-        if not verify:
-            return compose_obj.services["mc"].container_name[3:]  # type: ignore
-
-        services = cast(dict[str, Service], compose_obj.services)  # type: ignore
-        for service_name, service in services.items():
-            if service_name != "mc":
-                continue
-            if not isinstance(service.container_name, str):
-                continue
-            if service.container_name.startswith("mc-"):
-                return service.container_name[3:]
-
-        raise ValueError("Could not find server name in compose file")
+        try:
+            mc_compose = MCComposeFile(compose_obj)
+            return mc_compose.get_server_name()
+        except ValueError:
+            raise ValueError("Could not find server name in compose file")
 
     async def get_all_server_compose_obj(self) -> list[ComposeFile]:
         compose_obj_list = list[ComposeFile]()
@@ -51,7 +49,7 @@ class DockerMCManager:
         """
         compose_obj_list = await self.get_all_server_compose_obj()
         return [
-            self.parse_server_name_from_compose_obj(compose_obj, verify=False)
+            self.parse_server_name_from_compose_obj(compose_obj)
             for compose_obj in compose_obj_list
         ]
 

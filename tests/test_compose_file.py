@@ -2,10 +2,11 @@ import pytest
 
 from minecraft_docker_manager_lib.docker.compose_file import (
     ComposeFile,
+    Ports,
+    Volumes,
     convert_str_port_to_obj,
     convert_str_volume_to_obj,
 )
-from minecraft_docker_manager_lib.docker.compose_models import Ports, Volumes
 
 
 def test_convert_str_port_to_obj():
@@ -64,18 +65,18 @@ def test_expand_services():
 
     compose_file = ComposeFile.from_dict(compose_dict)
 
-    assert compose_file.services["web"].ports == [
+    assert compose_file.services["web"].ports == [  # type: ignore
         Ports(target="3000"),
         Ports(host_ip="127.0.0.1", published="8001", target="8001"),
         Ports(published="6060", target="6060", protocol="udp"),
     ]
 
-    assert compose_file.services["web"].volumes == [
+    assert compose_file.services["web"].volumes == [  # type: ignore
         Volumes(type="bind", source="/home", target="/home", read_only=True),
         Volumes(type="bind", source="/data", target="/data"),
     ]
 
-    assert compose_file.services["web"].environment == {
+    assert compose_file.services["web"].environment == {  # type: ignore
         "KEY1": "value1",
         "KEY2": "value2",
     }
@@ -83,7 +84,7 @@ def test_expand_services():
 
 def test_expand_services_with_dicts():
     # Test case for expand_services method when ports, environment, and volumes are already dicts
-    compose_dict = {
+    compose_dict = {  # type: ignore
         "services": {
             "web": {
                 "ports": [
@@ -102,20 +103,20 @@ def test_expand_services_with_dicts():
         }
     }
 
-    compose_file = ComposeFile.from_dict(compose_dict)
+    compose_file = ComposeFile.from_dict(compose_dict)  # type:ignore
 
-    assert compose_file.services["web"].ports == [
+    assert compose_file.services["web"].ports == [  # type:ignore
         Ports(target="3000"),
         Ports(host_ip="127.0.0.1", published="8001", target="8001"),
         Ports(published="6060", target="6060", protocol="udp"),
     ]
 
-    assert compose_file.services["web"].volumes == [
+    assert compose_file.services["web"].volumes == [  # type:ignore
         Volumes(type="bind", source="/home", target="/home", read_only=True),
         Volumes(type="bind", source="/data", target="/data"),
     ]
 
-    assert compose_file.services["web"].environment == {
+    assert compose_file.services["web"].environment == {  # type:ignore
         "KEY1": "value1",
         "KEY2": "value2",
     }

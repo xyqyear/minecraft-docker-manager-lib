@@ -4,8 +4,7 @@ from typing import cast
 
 from aiofiles import os as aioos
 
-from .docker.compose_file import ComposeFile
-from .docker.compose_models import Service
+from .docker.compose_file import ComposeFile, Service
 from .docker.manager import DockerManager
 from .instance import MCInstance, MCServerInfo
 

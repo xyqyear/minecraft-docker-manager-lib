@@ -1,12 +1,67 @@
 import re
 from pathlib import Path
-from typing import Any, Self
+from typing import Annotated, Any, Mapping, Self, Sequence
 
 import aiofiles
 import yaml
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from .compose_models import ComposeSpecification, Ports, Volumes
+
+class Ports(BaseModel):
+    host_ip: str | None = None
+    published: str | int | None = None
+    target: int | str | None = None
+    protocol: str | None = None
+
+
+class Volumes(BaseModel):
+    type: str
+    source: str | None = None
+    target: str | None = None
+    read_only: bool | str | None = None
+
+
+class Build(BaseModel):
+    context: str | None = None
+    dockerfile: str | None = None
+
+
+class Service(BaseModel):
+    container_name: str | None = None
+    image: str | None = None
+    build: str | Build | None = None
+    ports: Sequence[float | str | Ports] | None = None
+    volumes: Sequence[str | Volumes] | None = None
+    environment: Mapping[str, str | float | bool | None] | Sequence[str] | None = None
+    env_file: str | Sequence[str] | None = None
+    stdin_open: bool | str | None = None
+    tty: bool | str | None = None
+    restart: str | None = None
+    command: str | Sequence[str] | None = None
+    network_mode: str | None = None
+    privileged: bool | str | None = None
+    user: str | None = None
+    hostname: str | None = None
+    mac_address: str | None = None
+    extra_hosts: Mapping[str, str | Sequence[Any]] | Sequence[str] | None = None
+    depends_on: Sequence[str] | None = None
+    links: Sequence[str] | None = None
+    expose: Sequence[str | float] | None = None
+    cap_add: Sequence[str] | None = None
+    group_add: Sequence[str | float] | None = None
+    devices: Sequence[str] | None = None
+    pid: str | None = None
+    healthcheck: Mapping[str, Any] | None = None
+
+
+class ComposeSpecification(BaseModel):
+    version: Annotated[str | None, Field(None, description='declared for backward compatibility, ignored.')] = None
+    name: Annotated[str | None, Field(
+        None,
+        description='define the Compose project name, until user defines one explicitly.',
+    )] = None
+    services: Mapping[str, Service] | None = None
+    volumes: Mapping[str, Any] | None = None
 
 
 def convert_str_port_to_obj(port: float | str) -> Ports:

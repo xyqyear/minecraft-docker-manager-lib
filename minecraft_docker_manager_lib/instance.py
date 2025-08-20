@@ -7,8 +7,7 @@ from typing import cast
 import aiofiles
 import aiofiles.os as aioos
 
-from .docker.compose_file import ComposeFile
-from .docker.compose_models import Ports
+from .docker.compose_file import ComposeFile, Ports
 from .docker.manager import ComposeManager
 from .utils import async_rmtree
 

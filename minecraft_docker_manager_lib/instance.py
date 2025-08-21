@@ -5,6 +5,7 @@ from pathlib import Path
 
 import aiofiles
 import aiofiles.os as aioos
+import yaml
 
 from .docker.compose_file import ComposeFile
 from .docker.manager import ComposeManager
@@ -80,13 +81,43 @@ class MCInstance:
         成功后只需检查服务器名称是否匹配。
         """
         try:
-            mc_compose = MCComposeFile(compose_obj)
             # MCComposeFile初始化成功 = 格式验证通过
-            # get_server_name()不会抛出异常，因为容器名格式已验证
-            return mc_compose.get_server_name() == self._name
+            mc_compose = MCComposeFile(compose_obj)
         except ValueError:
-            # 只有MCComposeFile初始化可能失败
             return False
+        return mc_compose.get_server_name() == self._name
+
+    def verify_compose_yaml(self, compose_yaml: str) -> bool:
+        """
+        验证YAML字符串是否符合Minecraft服务器要求
+        
+        将YAML字符串转换为ComposeFile对象并验证。
+        """
+        try:
+            compose_dict = yaml.load(compose_yaml, Loader=yaml.CLoader)
+            compose_obj = ComposeFile.from_dict(compose_dict)
+            return self.verify_compose_obj(compose_obj)
+        except (yaml.YAMLError, ValueError, Exception):
+            return False
+
+    async def get_compose_file(self) -> str:
+        """
+        Get the current compose file content as a YAML string
+        
+        Returns:
+            str: The current compose.yaml file content
+            
+        Raises:
+            FileNotFoundError: If compose.yaml doesn't exist for this server
+        """
+        compose_file_path = await self.get_compose_file_path()
+        if compose_file_path is None:
+            raise FileNotFoundError(
+                f"Could not find compose.yaml for server {self._name}"
+            )
+        
+        async with aiofiles.open(compose_file_path, "r", encoding="utf8") as file:
+            return await file.read()
 
     async def get_compose_obj(self) -> ComposeFile:
         compose_file_path = await self.get_compose_file_path()
@@ -150,35 +181,59 @@ class MCInstance:
     async def get_logs_from_docker(self, tail: int = 1000) -> str:
         return await self._compose_manager.logs(tail)
 
-    async def create(self, compose_obj: ComposeFile) -> None:
+    async def create(self, compose_yaml: str) -> None:
         """
         create a new directory for the server and write the compose file to it
         it also creates a data directory for the server
+        
+        Args:
+            compose_yaml: Docker compose configuration as YAML string
+            
+        Raises:
+            ValueError: If YAML is invalid or doesn't meet Minecraft server requirements
+            FileExistsError: If compose.yaml already exists for this server
         """
-        if not self.verify_compose_obj(compose_obj):
-            raise ValueError("Invalid compose file")
+        if not self.verify_compose_yaml(compose_yaml):
+            raise ValueError("Invalid compose YAML or doesn't meet Minecraft server requirements")
 
         await aioos.makedirs(self._project_path, exist_ok=True)
         if await self.get_compose_file_path() is not None:
             raise FileExistsError(
                 f"compose.yaml already exists for server {self._name}"
             )
+        
         compose_file_path = self._project_path / "compose.yaml"
-        await compose_obj.async_to_file(compose_file_path)
+        async with aiofiles.open(compose_file_path, "w", encoding="utf8") as file:
+            await file.write(compose_yaml)
+        
         await aioos.makedirs(self._project_path / "data", exist_ok=True)
 
-    async def update_compose_file(self, compose_obj: ComposeFile) -> None:
+    async def update_compose_file(self, compose_yaml: str) -> None:
+        """
+        Update the compose file for the server with a new YAML configuration
+        
+        Args:
+            compose_yaml: Docker compose configuration as YAML string
+            
+        Raises:
+            RuntimeError: If server is currently created/running
+            ValueError: If YAML is invalid or doesn't meet Minecraft server requirements
+            FileNotFoundError: If compose.yaml doesn't exist for this server
+        """
         if await self.created():
             raise RuntimeError(f"Cannot update server {self._name} while it is created")
-        if not self.verify_compose_obj(compose_obj):
-            raise ValueError("Invalid compose file")
+        if not self.verify_compose_yaml(compose_yaml):
+            raise ValueError("Invalid compose YAML or doesn't meet Minecraft server requirements")
 
         compose_file_path = await self.get_compose_file_path()
         if compose_file_path is None:
             raise FileNotFoundError(
                 f"Could not find compose.yaml for server {self._name}"
             )
-        await compose_obj.async_to_file(compose_file_path)
+        
+        # Write YAML string directly to file
+        async with aiofiles.open(compose_file_path, "w", encoding="utf8") as file:
+            await file.write(compose_yaml)
 
     async def remove(self) -> None:
         if await self._compose_manager.created():

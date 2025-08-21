@@ -81,7 +81,7 @@ class DockerMCManager:
         """
         uses docker api to get all running servers (docker compose ps)
         """
-        container_list = await DockerManager().ps()
+        container_list = await DockerManager.ps()
         server_names = await self.get_all_server_names()
         running_servers = list[str]()
         for container in container_list:

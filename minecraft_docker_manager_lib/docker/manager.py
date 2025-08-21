@@ -132,12 +132,13 @@ class ComposeManager:
 
 
 class DockerManager:
-    async def run_command(self, *args: str) -> str:
-        # return await run_command("docker", command, *args, "--format", "json")
-        return await exec_command("docker", *args, "--format", "json")
+    @staticmethod
+    async def run_sub_command(*args: str) -> str:
+        return await exec_command("docker", *args)
 
-    async def ps(self):
-        output = await self.run_command("ps", "--no-trunc")
+    @classmethod
+    async def ps(cls):
+        output = await cls.run_sub_command("ps", "--no-trunc", "--format", "json")
         return [
             DockerPsParsed.from_docker_ps(json.loads(line))
             for line in output.splitlines()

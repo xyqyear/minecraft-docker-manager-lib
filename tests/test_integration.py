@@ -1,71 +1,23 @@
+# pyright: reportUnusedImport=false
 import asyncio
 import random
-from pathlib import Path
 
 import aiofiles.os as aioos
 import pytest
-import pytest_asyncio
 
 from minecraft_docker_manager_lib import (
-    ComposeFile,
     DockerMCManager,
     MCPlayerMessage,
     MCServerInfo,
 )
-from minecraft_docker_manager_lib.utils import async_rmtree, run_shell_command
+from minecraft_docker_manager_lib.docker.manager import DockerManager
 
 from .mcc_docker_wrapper import MCCDockerWrapper
-
-TEST_ROOT_PATH = Path("/tmp/test_temp_dir")
-
-
-def create_mc_server_compose_obj(
-    server_name: str, game_port: int, rcon_port: int
-) -> ComposeFile:
-    return ComposeFile.from_dict(
-        {
-            "services": {
-                "mc": {
-                    "image": "itzg/minecraft-server:java21-alpine",
-                    "container_name": f"mc-{server_name}",
-                    "environment": {
-                        "EULA": "true",
-                        "VERSION": "1.20.4",
-                        "INIT_MEMORY": "0M",
-                        "MAX_MEMORY": "500M",
-                        "ONLINE_MODE": "false",
-                        "TYPE": "VANILLA",
-                        "ENABLE_RCON": "true",
-                        "MODE": "creative",
-                        "VIEW_DISTANCE": "1",
-                        "LEVEL_TYPE": "minecraft:flat",
-                        "GENERATE_STRUCTURES": "false",
-                        "SPAWN_NPCS": "false",
-                        "SPAWN_ANIMALS": "false",
-                        "SPAWN_MONSTERS": "false",
-                        "FORCE_GAMEMODE": "true",
-                    },
-                    "ports": [f"{game_port}:25565", f"{rcon_port}:25575"],
-                    "volumes": ["./data:/data"],
-                    "stdin_open": True,
-                    "tty": True,
-                    "restart": "unless-stopped",
-                }
-            }
-        }
-    )
-
-
-@pytest_asyncio.fixture  # type: ignore
-async def teardown():
-    if await aioos.path.exists(TEST_ROOT_PATH):
-        await async_rmtree(TEST_ROOT_PATH)
-    await aioos.makedirs(TEST_ROOT_PATH)
-    containers_to_remove = list[str]()
-    yield containers_to_remove
-    for container_name in containers_to_remove:
-        await run_shell_command(f"docker rm -f {container_name}")
-    await async_rmtree(TEST_ROOT_PATH)
+from .test_utils import (
+    TEST_ROOT_PATH,
+    create_mc_server_compose_yaml,
+    teardown,
+)
 
 
 @pytest.mark.asyncio
@@ -87,10 +39,14 @@ async def test_integration(teardown: list[str]):
 
     assert set(await docker_mc_manager.get_all_server_names()) == set()
 
-    server1_compose_obj = create_mc_server_compose_obj("testserver1", 34544, 34544 + 1)
-    server2_compose_obj = create_mc_server_compose_obj("testserver2", 34554, 34554 + 1)
-    server1_create_coroutine = server1.create(server1_compose_obj)
-    server2_create_coroutine = server2.create(server2_compose_obj)
+    server1_compose_yaml = create_mc_server_compose_yaml(
+        "testserver1", 34544, 34544 + 1
+    )
+    server2_compose_yaml = create_mc_server_compose_yaml(
+        "testserver2", 34554, 34554 + 1
+    )
+    server1_create_coroutine = server1.create(server1_compose_yaml)
+    server2_create_coroutine = server2.create(server2_compose_yaml)
     await aioos.makedirs(TEST_ROOT_PATH / "irrelevant_dir", exist_ok=True)
     await asyncio.gather(server1_create_coroutine, server2_create_coroutine)
     assert set(await docker_mc_manager.get_all_server_names()) == set(
@@ -244,6 +200,50 @@ async def test_integration(teardown: list[str]):
 
     print("server1 restarted")
 
+    # Test update_compose_file functionality while server is running
+    print("Starting update_compose_file tests")
+
+    original_compose = await server1.get_compose_file()
+    print("Read original compose file")
+    updated_compose = original_compose.replace("MODE: creative", "MODE: survival")
+
+    # Try to update while server is running - should fail with RuntimeError
+    with pytest.raises(RuntimeError, match="while it is created"):
+        await server1.update_compose_file(updated_compose)
+    print("✅ Correctly caught RuntimeError when trying to update running server")
+
+    # Bring server down for update
+    await server1.down()
+    assert not await server1.running()
+    assert not await server1.created()
+    print("Brought server down for update")
+
+    # Now update should succeed
+    await server1.update_compose_file(updated_compose)
+    print("Successfully updated compose file")
+
+    # Bring the server up again to verify the update worked
+    await server1.up()
+    await server1.wait_until_healthy()
+    assert await server1.running()
+    assert await server1.healthy()
+    print("Server is running again with updated config")
+
+    # Verify the environment variable via DockerManager
+    docker_env_output = await DockerManager.run_sub_command(
+        "inspect",
+        "mc-testserver1",
+        "--format",
+        "{{range .Config.Env}}{{println .}}{{end}}",
+    )
+    assert "MODE=survival" in docker_env_output
+    print(
+        "✅ Verified compose file change via docker inspect"
+    )
+
+    print("✅ update_compose_file tests completed successfully")
+
+    # Final cleanup
     await server1.down()
     assert not await server1.running()
     assert not await server1.healthy()

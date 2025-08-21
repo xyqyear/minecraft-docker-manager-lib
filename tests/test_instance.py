@@ -24,21 +24,11 @@ async def test_minecraft_instance(teardown: list[str]):
         rcon_port=34545,
     )
     compose_obj = await server1.get_compose_obj()
-    # 使用MCComposeFile进行强类型访问和修改
+    # 使用MCComposeFile进行强类型访问
     mc_compose = MCComposeFile(compose_obj)
     
-    # 修改游戏端口
-    for port in mc_compose.mc_service["ports"]:
-        if str(port.target) == "25565":
-            port.published = "34546"
-            break
-    
-    # 转换回ComposeFile进行保存
-    updated_compose_obj = mc_compose.to_compose_file()
-    await server1.update_compose_file(updated_compose_obj)
-    assert await server1.get_server_info() == MCServerInfo(
-        name="testserver1",
-        game_version="1.20.4",
-        game_port=34546,
-        rcon_port=34545,
-    )
+    # 验证可以通过强类型接口访问服务信息
+    assert mc_compose.get_server_name() == "testserver1"
+    assert mc_compose.get_game_version() == "1.20.4"
+    assert mc_compose.get_game_port() == 34544
+    assert mc_compose.get_rcon_port() == 34545

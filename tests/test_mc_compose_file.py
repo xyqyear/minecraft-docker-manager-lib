@@ -1,4 +1,6 @@
 # pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
+from typing import Any
+
 import pytest
 
 from minecraft_docker_manager_lib.docker.compose_file import ComposeFile
@@ -7,7 +9,7 @@ from minecraft_docker_manager_lib.mc_compose_file import MCComposeFile
 
 def test_mc_compose_file_basic():
     """测试MCComposeFile的基本功能"""
-    test_data = {
+    test_data: dict[str, Any] = {
         "services": {
             "mc": {
                 "image": "itzg/minecraft-server:java21-alpine",
@@ -37,7 +39,7 @@ def test_mc_compose_file_basic():
 
 def test_mc_compose_file_custom_ports():
     """测试自定义端口"""
-    test_data = {
+    test_data: dict[str, Any] = {
         "services": {
             "mc": {
                 "image": "itzg/minecraft-server:java21-alpine",
@@ -73,7 +75,7 @@ def test_mc_compose_file_validation_errors():
 
     # 容器名不符合规范
     with pytest.raises(ValueError, match="Container name must start with 'mc-'"):
-        test_data = {
+        test_data: dict[str, Any] = {
             "services": {
                 "mc": {
                     "container_name": "wrong-name",
@@ -88,7 +90,7 @@ def test_mc_compose_file_validation_errors():
 
     # 没有VERSION环境变量
     with pytest.raises(ValueError, match="Could not find VERSION in environment"):
-        test_data = {
+        test_data: dict[str, Any] = {
             "services": {
                 "mc": {
                     "container_name": "mc-test",
@@ -104,7 +106,7 @@ def test_mc_compose_file_validation_errors():
 
 def test_mc_compose_file_get_server_name():
     """测试get_server_name方法"""
-    test_data = {
+    test_data: dict[str, Any] = {
         "services": {
             "mc": {
                 "image": "itzg/minecraft-server:java21-alpine",
@@ -129,9 +131,119 @@ def test_mc_compose_file_get_server_name():
     assert mc_compose2.get_server_name() == "myserver123"
 
 
-def test_mc_compose_file_to_compose_file():
-    """测试转换回ComposeFile"""
-    test_data = {
+def test_mc_compose_file_validation_edge_cases():
+    """测试更多验证失败的边缘情况"""
+    # 测试容器名不是字符串
+    test_data: dict[str, Any] = {
+        "services": {
+            "mc": {
+                "image": "itzg/minecraft-server:java21-alpine",
+                "container_name": None,  # 不是字符串
+                "environment": {"VERSION": "1.20.4"},
+                "ports": ["25565:25565", "25575:25575"],
+                "volumes": ["./data:/data"],
+                "stdin_open": True,
+                "tty": True,
+                "restart": "unless-stopped",
+            }
+        }
+    }
+    
+    compose_obj = ComposeFile.from_dict(test_data)
+    with pytest.raises(ValueError, match="Invalid container name in compose file"):
+        MCComposeFile(compose_obj)
+    
+    # 测试容器名不以mc-开头
+    test_data["services"]["mc"]["container_name"] = "wrong-name"
+    compose_obj = ComposeFile.from_dict(test_data)
+    with pytest.raises(ValueError, match="Container name must start with 'mc-'"):
+        MCComposeFile(compose_obj)
+    
+    # 测试镜像为None
+    test_data["services"]["mc"]["container_name"] = "mc-test"
+    test_data["services"]["mc"]["image"] = None
+    compose_obj = ComposeFile.from_dict(test_data)
+    with pytest.raises(ValueError, match="Service must use itzg/minecraft-server image"):
+        MCComposeFile(compose_obj)
+    
+    # 测试镜像不包含itzg/minecraft-server
+    test_data["services"]["mc"]["image"] = "wrong/image:latest"
+    compose_obj = ComposeFile.from_dict(test_data)
+    with pytest.raises(ValueError, match="Service must use itzg/minecraft-server image"):
+        MCComposeFile(compose_obj)
+    
+    # 测试缺少游戏端口
+    test_data["services"]["mc"]["image"] = "itzg/minecraft-server:java21-alpine"
+    test_data["services"]["mc"]["ports"] = ["25575:25575"]  # 只有rcon端口
+    compose_obj = ComposeFile.from_dict(test_data)
+    with pytest.raises(ValueError, match="Could not find game port \\(25565\\) in compose file"):
+        MCComposeFile(compose_obj)
+    
+    # 测试缺少rcon端口
+    test_data["services"]["mc"]["ports"] = ["25565:25565"]  # 只有游戏端口
+    compose_obj = ComposeFile.from_dict(test_data)
+    with pytest.raises(ValueError, match="Could not find rcon port \\(25575\\) in compose file"):
+        MCComposeFile(compose_obj)
+
+
+def test_mc_compose_file_volumes_none():
+    """测试volumes为None的情况"""
+    test_data: dict[str, Any] = {
+        "services": {
+            "mc": {
+                "image": "itzg/minecraft-server:java21-alpine",
+                "container_name": "mc-testserver",
+                "environment": {"VERSION": "1.20.4"},
+                "ports": ["25565:25565", "25575:25575"],
+                "volumes": None,  # volumes为None
+                "stdin_open": True,
+                "tty": True,
+                "restart": "unless-stopped",
+            }
+        }
+    }
+    
+    compose_obj = ComposeFile.from_dict(test_data)
+    mc_compose = MCComposeFile(compose_obj)
+    
+    # 应该成功创建，volumes应该是空列表
+    assert mc_compose.mc_service["volumes"] == []
+
+
+def test_mc_compose_file_port_errors():
+    """测试端口访问时的错误情况"""
+    # 先创建一个正常的，然后手动修改端口来测试错误情况
+    valid_data: dict[str, Any] = {
+        "services": {
+            "mc": {
+                "image": "itzg/minecraft-server:java21-alpine", 
+                "container_name": "mc-testserver",
+                "environment": {"VERSION": "1.20.4"},
+                "ports": ["25565:25565", "25575:25575"],
+                "volumes": ["./data:/data"],
+                "stdin_open": True,
+                "tty": True,
+                "restart": "unless-stopped",
+            }
+        }
+    }
+    
+    compose_obj = ComposeFile.from_dict(valid_data)
+    mc_compose = MCComposeFile(compose_obj)
+    
+    # 手动清空端口来测试错误情况
+    mc_compose.services["mc"]["ports"] = []
+    
+    with pytest.raises(ValueError, match="Could not find game port in compose file"):
+        mc_compose.get_game_port()
+    
+    with pytest.raises(ValueError, match="Could not find rcon port in compose file"):
+        mc_compose.get_rcon_port()
+
+
+def test_mc_compose_file_default_ports():
+    """测试默认端口（published为None）的情况"""
+    test_data: dict[str, Any] = {
         "services": {
             "mc": {
                 "image": "itzg/minecraft-server:java21-alpine",
@@ -145,17 +257,19 @@ def test_mc_compose_file_to_compose_file():
             }
         }
     }
-
+    
     compose_obj = ComposeFile.from_dict(test_data)
     mc_compose = MCComposeFile(compose_obj)
-
-    # 转换回ComposeFile
-    converted_compose = mc_compose.to_compose_file()
-
-    # 验证可以再次创建MCComposeFile
-    mc_compose2 = MCComposeFile(converted_compose)
-    assert mc_compose2.get_server_name() == "testserver"
-    assert mc_compose2.get_game_version() == "1.20.4"
+    
+    # 手动设置published为None来测试默认端口
+    for port in mc_compose.services["mc"]["ports"]:
+        if str(port.target) == "25565":
+            port.published = None
+        elif str(port.target) == "25575":
+            port.published = None
+    
+    assert mc_compose.get_game_port() == 25565  # 默认端口
+    assert mc_compose.get_rcon_port() == 25575  # 默认端口
 
 
 if __name__ == "__main__":

@@ -161,12 +161,3 @@ class MCComposeFile(BaseModel):
     def get_game_version(self) -> str:
         """获取游戏版本"""
         return self.mc_service["environment"]["VERSION"]
-    
-    def to_compose_file(self) -> ComposeFile:
-        """转换回ComposeFile对象，用于保存等操作"""
-        return ComposeFile.from_dict({
-            "version": self.version,
-            "name": self.name,
-            "services": dict(self.services),
-            "volumes": self.volumes
-        })

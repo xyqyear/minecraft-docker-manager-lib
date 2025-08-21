@@ -34,6 +34,24 @@ def test_convert_str_port_to_obj():
     )
 
 
+def test_convert_str_port_to_obj_errors():
+    """测试端口转换的错误情况"""
+    # 测试浮点数输入
+    result = convert_str_port_to_obj(3000.5)
+    assert result == Ports(target="3000")  # 应该转换为整数再转字符串
+    
+    # 测试无效格式
+    with pytest.raises(ValueError, match="Invalid port format"):
+        convert_str_port_to_obj("invalid-port-format")
+
+
+def test_convert_str_volume_to_obj_errors():
+    """测试卷转换的错误情况"""
+    # 测试无效格式
+    with pytest.raises(ValueError, match="Invalid volume format"):
+        convert_str_volume_to_obj("invalid-volume-format")
+
+
 def test_convert_str_volume_to_obj():
     # Test cases for convert_str_volume_to_obj
     assert convert_str_volume_to_obj("/home:/home:ro") == Volumes(
@@ -120,6 +138,88 @@ def test_expand_services_with_dicts():
         "KEY1": "value1",
         "KEY2": "value2",
     }
+
+
+def test_compose_file_file_operations():
+    """测试ComposeFile的文件操作方法"""
+    import os
+    import tempfile
+    from typing import Any
+    
+    # 创建测试数据
+    test_data: dict[str, Any] = {
+        "version": "3.8",
+        "services": {
+            "web": {
+                "image": "nginx",
+                "ports": ["80:80"]
+            }
+        }
+    }
+    
+    # 测试to_dict方法
+    compose_file = ComposeFile.from_dict(test_data)
+    result_dict = compose_file.to_dict()
+    assert "version" in result_dict
+    assert "services" in result_dict
+    
+    # 测试文件写入和读取
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as tmp_file:
+        temp_path = tmp_file.name
+    
+    try:
+        # 测试to_file方法
+        compose_file.to_file(temp_path)
+        
+        # 测试from_file方法
+        loaded_compose = ComposeFile.from_file(temp_path)
+        assert loaded_compose.version == "3.8"
+        assert loaded_compose.services is not None
+        assert "web" in loaded_compose.services
+        
+    finally:
+        # 清理临时文件
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+async def test_compose_file_async_file_operations():
+    """测试ComposeFile的异步文件操作方法"""
+    import os
+    import tempfile
+    from typing import Any
+    
+    # 创建测试数据
+    test_data: dict[str, Any] = {
+        "version": "3.8",
+        "services": {
+            "web": {
+                "image": "nginx",
+                "ports": ["80:80"]
+            }
+        }
+    }
+    
+    compose_file = ComposeFile.from_dict(test_data)
+    
+    # 测试异步文件写入和读取
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as tmp_file:
+        temp_path = tmp_file.name
+    
+    try:
+        # 测试async_to_file方法
+        await compose_file.async_to_file(temp_path)
+        
+        # 测试async_from_file方法
+        loaded_compose = await ComposeFile.async_from_file(temp_path)
+        assert loaded_compose.version == "3.8"
+        assert loaded_compose.services is not None
+        assert "web" in loaded_compose.services
+        
+    finally:
+        # 清理临时文件
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,6 @@ from pathlib import Path
 
 from aiofiles import os as aioos
 
-from .docker.compose_file import ComposeFile
 from .docker.manager import DockerManager
 from .instance import MCInstance, MCServerInfo
 from .mc_compose_file import MCComposeFile
@@ -13,28 +12,8 @@ class DockerMCManager:
     def __init__(self, servers_path: str | Path) -> None:
         self.servers_path = Path(servers_path)
 
-    @staticmethod
-    def parse_server_name_from_compose_obj(compose_obj: ComposeFile) -> str:
-        """
-        解析服务器名称，使用MCComposeFile的强类型访问
-
-        Args:
-            compose_obj: ComposeFile对象
-
-        Returns:
-            服务器名称
-
-        Raises:
-            ValueError: 如果服务器名称未找到
-        """
-        try:
-            mc_compose = MCComposeFile(compose_obj)
-            return mc_compose.get_server_name()
-        except ValueError:
-            raise ValueError("Could not find server name in compose file")
-
-    async def get_all_server_compose_obj(self) -> list[ComposeFile]:
-        compose_obj_list = list[ComposeFile]()
+    async def get_all_server_compose_obj(self) -> list[MCComposeFile]:
+        compose_obj_list = list[MCComposeFile]()
         for sub_dir in await aioos.listdir(self.servers_path):
             instance = self.get_instance(sub_dir)
             try:
@@ -49,8 +28,8 @@ class DockerMCManager:
         """
         compose_obj_list = await self.get_all_server_compose_obj()
         return [
-            self.parse_server_name_from_compose_obj(compose_obj)
-            for compose_obj in compose_obj_list
+            mc_compose.get_server_name()
+            for mc_compose in compose_obj_list
         ]
 
     async def get_all_instances(self) -> list[MCInstance]:

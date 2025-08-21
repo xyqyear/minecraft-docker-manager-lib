@@ -73,30 +73,18 @@ class MCInstance:
         
         return None
 
-    def verify_compose_obj(self, compose_obj: ComposeFile) -> bool:
-        """
-        验证compose文件是否符合Minecraft服务器要求
-        
-        MCComposeFile初始化会验证所有基本要求，
-        成功后只需检查服务器名称是否匹配。
-        """
-        try:
-            # MCComposeFile初始化成功 = 格式验证通过
-            mc_compose = MCComposeFile(compose_obj)
-        except ValueError:
-            return False
-        return mc_compose.get_server_name() == self._name
-
-    def verify_compose_yaml(self, compose_yaml: str) -> bool:
+    def _verify_compose_yaml(self, compose_yaml: str) -> bool:
         """
         验证YAML字符串是否符合Minecraft服务器要求
         
-        将YAML字符串转换为ComposeFile对象并验证。
+        将YAML字符串转换为MCComposeFile对象并验证。
         """
         try:
             compose_dict = yaml.load(compose_yaml, Loader=yaml.CLoader)
             compose_obj = ComposeFile.from_dict(compose_dict)
-            return self.verify_compose_obj(compose_obj)
+            # MCComposeFile初始化成功 = 格式验证通过
+            mc_compose = MCComposeFile(compose_obj)
+            return mc_compose.get_server_name() == self._name
         except (yaml.YAMLError, ValueError, Exception):
             return False
 
@@ -119,7 +107,7 @@ class MCInstance:
         async with aiofiles.open(compose_file_path, "r", encoding="utf8") as file:
             return await file.read()
 
-    async def get_compose_obj(self) -> ComposeFile:
+    async def get_compose_obj(self) -> MCComposeFile:
         compose_file_path = await self.get_compose_file_path()
         if compose_file_path is None:
             raise FileNotFoundError(
@@ -127,12 +115,14 @@ class MCInstance:
             )
         compose_obj = await ComposeFile.async_from_file(compose_file_path)
 
-        if self.verify_compose_obj(compose_obj):
-            return compose_obj
-
-        raise FileNotFoundError(
-            f"Could not find valid compose.yaml file for server {self._name}"
-        )
+        # Validate using MCComposeFile
+        mc_compose = MCComposeFile(compose_obj)
+        if mc_compose.get_server_name() != self._name:
+            raise FileNotFoundError(
+                f"Could not find valid compose.yaml file for server {self._name}"
+            )
+        
+        return mc_compose
 
     def _get_log_path(self) -> Path:
         return self._project_path / "data" / "logs" / "latest.log"
@@ -193,7 +183,7 @@ class MCInstance:
             ValueError: If YAML is invalid or doesn't meet Minecraft server requirements
             FileExistsError: If compose.yaml already exists for this server
         """
-        if not self.verify_compose_yaml(compose_yaml):
+        if not self._verify_compose_yaml(compose_yaml):
             raise ValueError("Invalid compose YAML or doesn't meet Minecraft server requirements")
 
         await aioos.makedirs(self._project_path, exist_ok=True)
@@ -222,7 +212,7 @@ class MCInstance:
         """
         if await self.created():
             raise RuntimeError(f"Cannot update server {self._name} while it is created")
-        if not self.verify_compose_yaml(compose_yaml):
+        if not self._verify_compose_yaml(compose_yaml):
             raise ValueError("Invalid compose YAML or doesn't meet Minecraft server requirements")
 
         compose_file_path = await self.get_compose_file_path()
@@ -293,10 +283,8 @@ class MCInstance:
         使用MCComposeFile进行强类型访问，一旦MCComposeFile创建成功，
         就意味着所有必需的字段都已经验证并且类型正确。
         """
-        compose_obj = await self.get_compose_obj()
-        mc_compose = MCComposeFile(compose_obj)  # 完成所有验证和类型转换
+        mc_compose = await self.get_compose_obj()
         
-        # 此时可以安全地调用强类型方法，无需额外的类型检查
         return MCServerInfo(
             name=mc_compose.get_server_name(),
             game_version=mc_compose.get_game_version(),

@@ -1,7 +1,7 @@
 #pyright: reportUnusedImport=false
 import pytest
 
-from minecraft_docker_manager_lib import DockerMCManager, MCComposeFile, MCServerInfo
+from minecraft_docker_manager_lib import DockerMCManager, MCServerInfo
 
 from .test_utils import (
     TEST_ROOT_PATH,
@@ -23,8 +23,7 @@ async def test_minecraft_instance(teardown: list[str]):
         game_port=34544,
         rcon_port=34545,
     )
-    compose_obj = await server1.get_compose_obj()
-    mc_compose = MCComposeFile(compose_obj)
+    mc_compose = await server1.get_compose_obj()
 
     assert mc_compose.get_server_name() == "testserver1"
     assert mc_compose.get_game_version() == "1.20.4"

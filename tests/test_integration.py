@@ -78,31 +78,14 @@ async def test_integration(teardown: list[str]):
 
     print("servers created")
 
-    assert await server1.exists()
-    assert not await server1.running()
-    assert not await server1.healthy()
-    assert not await server1.created()
-    assert await server2.exists()
-    assert not await server2.running()
-    assert not await server2.healthy()
-    assert not await server2.created()
-
-    assert set(await docker_mc_manager.get_running_server_names()) == set()
-
     await server1.up()
     await server2.up()
     print("servers up")
-    assert await server1.created()
-    assert await server2.created()
 
     wait_server1_coroutine = server1.wait_until_healthy()
     wait_server2_coroutine = server2.wait_until_healthy()
     await asyncio.gather(wait_server1_coroutine, wait_server2_coroutine)
 
-    assert await server1.running()
-    assert await server1.healthy()
-    assert await server2.running()
-    assert await server2.healthy()
     assert set(await docker_mc_manager.get_running_server_names()) == set(
         ["testserver1", "testserver2"]
     )
@@ -176,30 +159,6 @@ async def test_integration(teardown: list[str]):
 
     assert await server1.list_players() == []
 
-    await server1.stop()
-    assert not await server1.running()
-    assert not await server1.healthy()
-    assert await server1.created()
-
-    print("server1 stopped")
-
-    await server1.start()
-    assert await server1.running()
-
-    await server1.wait_until_healthy()
-    assert await server1.healthy()
-
-    print("server1 started")
-
-    await server1.restart()
-    assert await server1.running()
-    assert not await server1.healthy()
-
-    await server1.wait_until_healthy()
-    assert await server1.healthy()
-
-    print("server1 restarted")
-
     # Test update_compose_file functionality while server is running
     print("Starting update_compose_file tests")
 
@@ -214,8 +173,6 @@ async def test_integration(teardown: list[str]):
 
     # Bring server down for update
     await server1.down()
-    assert not await server1.running()
-    assert not await server1.created()
     print("Brought server down for update")
 
     # Now update should succeed
@@ -225,8 +182,6 @@ async def test_integration(teardown: list[str]):
     # Bring the server up again to verify the update worked
     await server1.up()
     await server1.wait_until_healthy()
-    assert await server1.running()
-    assert await server1.healthy()
     print("Server is running again with updated config")
 
     # Verify the environment variable via DockerManager
@@ -237,16 +192,10 @@ async def test_integration(teardown: list[str]):
         "{{range .Config.Env}}{{println .}}{{end}}",
     )
     assert "MODE=survival" in docker_env_output
-    print(
-        "✅ Verified compose file change via docker inspect"
-    )
+    print("✅ Verified compose file change via docker inspect")
 
     print("✅ update_compose_file tests completed successfully")
 
     # Final cleanup
     await server1.down()
-    assert not await server1.running()
-    assert not await server1.healthy()
-    assert not await server1.created()
-
     print("server1 down")

@@ -108,11 +108,21 @@ class ComposeManager:
         return await self.run_compose_command("logs", "--tail", str(tail))
 
     async def running(self) -> bool:
-        process = await self.run_compose_command("ps", "-q")
+        try:
+            process = await self.run_compose_command("ps", "-q")
+        except RuntimeError as e:
+            if "no configuration file" in str(e):
+                return False
+            raise e
         return process != ""
 
     async def created(self) -> bool:
-        process = await self.run_compose_command("ps", "--all", "-q")
+        try:
+            process = await self.run_compose_command("ps", "--all", "-q")
+        except RuntimeError as e:
+            if "no configuration file" in str(e):
+                return False
+            raise e
         return process != ""
 
     async def ps(self, service_name: str) -> DockerComposePsParsed:
@@ -123,11 +133,26 @@ class ComposeManager:
                 return parsed
         raise ValueError(f"Could not find service {service_name}")
 
+    async def starting(self, service_name: str) -> bool:
+        try:
+            compose_ps = await self.ps(service_name)
+        except ValueError:
+            return False
+        except RuntimeError as e:
+            if "no configuration file" in str(e):
+                return False
+            raise e
+        return compose_ps.health == "starting"
+
     async def healthy(self, service_name: str) -> bool:
         try:
             compose_ps = await self.ps(service_name)
         except ValueError:
             return False
+        except RuntimeError as e:
+            if "no configuration file" in str(e):
+                return False
+            raise e
         return compose_ps.health == "healthy"
 
 

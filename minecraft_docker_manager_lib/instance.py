@@ -1,6 +1,7 @@
 import asyncio
 import re
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 import aiofiles
@@ -16,6 +17,18 @@ PLAYER_MESSAGE_PATTERN = re.compile(
     r"\]: (?:\[Not Secure\] )?<(?P<player>.*?)> (?P<message>.*)"
 )
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+
+class MCServerStatus(str, Enum):
+    """Minecraft server status levels in hierarchical order"""
+
+    REMOVED = "removed"  # Server directory/config doesn't exist
+    EXISTS = "exists"  # Server config exists but container not created
+    CREATED = "created"  # Container created but not running
+    RUNNING = "running"  # Container is running but may not be healthy
+    STARTING = "starting"  # Container is starting
+    HEALTHY = "healthy"  # Container is running and healthy
+    PAUSED = "paused"  # Container is running, healthy, but paused by autopause
 
 
 @dataclass
@@ -59,24 +72,23 @@ class MCInstance:
             self._project_path / "docker-compose.yml",
             self._project_path / "docker-compose.yaml",
             self._project_path / "compose.yml",
-            self._project_path / "compose.yaml"
+            self._project_path / "compose.yaml",
         ]
-        
+
         existence_checks = await asyncio.gather(
-            *[aioos.path.exists(path) for path in candidates],
-            return_exceptions=True
+            *[aioos.path.exists(path) for path in candidates], return_exceptions=True
         )
-        
+
         for path, exists in zip(candidates, existence_checks):
             if exists is True:
                 return path
-        
+
         return None
 
     def _verify_compose_yaml(self, compose_yaml: str) -> bool:
         """
         验证YAML字符串是否符合Minecraft服务器要求
-        
+
         将YAML字符串转换为MCComposeFile对象并验证。
         """
         try:
@@ -91,10 +103,10 @@ class MCInstance:
     async def get_compose_file(self) -> str:
         """
         Get the current compose file content as a YAML string
-        
+
         Returns:
             str: The current compose.yaml file content
-            
+
         Raises:
             FileNotFoundError: If compose.yaml doesn't exist for this server
         """
@@ -103,7 +115,7 @@ class MCInstance:
             raise FileNotFoundError(
                 f"Could not find compose.yaml for server {self._name}"
             )
-        
+
         async with aiofiles.open(compose_file_path, "r", encoding="utf8") as file:
             return await file.read()
 
@@ -121,7 +133,7 @@ class MCInstance:
             raise FileNotFoundError(
                 f"Could not find valid compose.yaml file for server {self._name}"
             )
-        
+
         return mc_compose
 
     def _get_log_path(self) -> Path:
@@ -175,36 +187,38 @@ class MCInstance:
         """
         create a new directory for the server and write the compose file to it
         it also creates a data directory for the server
-        
+
         Args:
             compose_yaml: Docker compose configuration as YAML string
-            
+
         Raises:
             ValueError: If YAML is invalid or doesn't meet Minecraft server requirements
             FileExistsError: If compose.yaml already exists for this server
         """
         if not self._verify_compose_yaml(compose_yaml):
-            raise ValueError("Invalid compose YAML or doesn't meet Minecraft server requirements")
+            raise ValueError(
+                "Invalid compose YAML or doesn't meet Minecraft server requirements"
+            )
 
         await aioos.makedirs(self._project_path, exist_ok=True)
         if await self.get_compose_file_path() is not None:
             raise FileExistsError(
                 f"compose.yaml already exists for server {self._name}"
             )
-        
+
         compose_file_path = self._project_path / "compose.yaml"
         async with aiofiles.open(compose_file_path, "w", encoding="utf8") as file:
             await file.write(compose_yaml)
-        
+
         await aioos.makedirs(self._project_path / "data", exist_ok=True)
 
     async def update_compose_file(self, compose_yaml: str) -> None:
         """
         Update the compose file for the server with a new YAML configuration
-        
+
         Args:
             compose_yaml: Docker compose configuration as YAML string
-            
+
         Raises:
             RuntimeError: If server is currently created/running
             ValueError: If YAML is invalid or doesn't meet Minecraft server requirements
@@ -213,14 +227,16 @@ class MCInstance:
         if await self.created():
             raise RuntimeError(f"Cannot update server {self._name} while it is created")
         if not self._verify_compose_yaml(compose_yaml):
-            raise ValueError("Invalid compose YAML or doesn't meet Minecraft server requirements")
+            raise ValueError(
+                "Invalid compose YAML or doesn't meet Minecraft server requirements"
+            )
 
         compose_file_path = await self.get_compose_file_path()
         if compose_file_path is None:
             raise FileNotFoundError(
                 f"Could not find compose.yaml for server {self._name}"
             )
-        
+
         # Write YAML string directly to file
         async with aiofiles.open(compose_file_path, "w", encoding="utf8") as file:
             await file.write(compose_yaml)
@@ -261,14 +277,40 @@ class MCInstance:
     async def running(self) -> bool:
         return await self._compose_manager.running()
 
+    async def starting(self) -> bool:
+        return await self._compose_manager.starting("mc")
+
     async def healthy(self) -> bool:
         return await self._compose_manager.healthy("mc")
 
-    async def paused(self) -> bool:
-        mc_health_result = await self._compose_manager.exec("mc", "mc-health")
-        if "Java process suspended by Autopause function" in mc_health_result:
-            return True
-        return False
+    async def get_status(self) -> MCServerStatus:
+        """
+        Get the current status of the Minecraft server
+
+        Returns the highest status level that the server has achieved.
+        Status levels are hierarchical - if a server is healthy, it's also
+        running, created, and exists.
+
+        Returns:
+            MCServerStatus: The current server status
+        """
+        # Check in reverse hierarchical order (highest to lowest)
+        if not await self.exists():
+            return MCServerStatus.REMOVED
+
+        if not await self.created():
+            return MCServerStatus.EXISTS
+
+        if not await self.running():
+            return MCServerStatus.CREATED
+
+        if await self.starting():
+            return MCServerStatus.STARTING
+
+        if not await self.healthy():
+            return MCServerStatus.RUNNING
+
+        return MCServerStatus.HEALTHY
 
     async def wait_until_healthy(self) -> None:
         if not await self.running():
@@ -279,12 +321,12 @@ class MCInstance:
     async def get_server_info(self):
         """
         获取服务器信息
-        
+
         使用MCComposeFile进行强类型访问，一旦MCComposeFile创建成功，
         就意味着所有必需的字段都已经验证并且类型正确。
         """
         mc_compose = await self.get_compose_obj()
-        
+
         return MCServerInfo(
             name=mc_compose.get_server_name(),
             game_version=mc_compose.get_game_version(),

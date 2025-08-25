@@ -8,10 +8,17 @@ import aiofiles
 import aiofiles.os as aioos
 import yaml
 
+from .docker.cgroup import (
+    BlockIOStats,
+    MemoryStats,
+    read_block_io_stats,
+    read_memory_stats,
+)
 from .docker.compose_file import ComposeFile
 from .docker.manager import ComposeManager
+from .docker.network import NetworkStats, read_container_network_stats
 from .mc_compose_file import MCComposeFile
-from .utils import async_rmtree
+from .utils import async_rmtree, exec_command, get_process_cpu_usage
 
 PLAYER_MESSAGE_PATTERN = re.compile(
     r"\]: (?:\[Not Secure\] )?<(?P<player>.*?)> (?P<message>.*)"
@@ -360,3 +367,97 @@ class MCInstance:
         if not await self.healthy():
             raise RuntimeError(f"Server {self._name} is not healthy")
         await self._compose_manager.exec("mc", "mc-send-to-console", command)
+
+    async def get_container_id(self) -> str:
+        """
+        Get the Docker container ID for the mc service.
+        
+        Returns:
+            str: The container ID
+            
+        Raises:
+            RuntimeError: If the container is not running or not found
+        """
+        if not await self.running():
+            raise RuntimeError(f"Server {self._name} is not running")
+        
+        container_id = await self._compose_manager.run_compose_command("ps", "-q", "mc")
+        container_id = container_id.strip()
+        
+        if not container_id:
+            raise RuntimeError(f"Could not find container ID for service 'mc' in server {self._name}")
+        
+        return container_id
+
+    async def get_pid(self) -> int:
+        """
+        Get the main process PID of the Docker container.
+        
+        Returns:
+            int: The process ID
+            
+        Raises:
+            RuntimeError: If the container is not running or PID cannot be retrieved
+        """
+        container_id = await self.get_container_id()
+        
+        # Use docker inspect to get the PID
+        result = await exec_command("docker", "inspect", "--format={{.State.Pid}}", container_id)
+        pid_str = result.strip()
+        
+        if not pid_str or pid_str == "0":
+            raise RuntimeError(f"Could not retrieve PID for container {container_id}")
+        
+        return int(pid_str)
+
+    async def get_memory_usage(self) -> MemoryStats:
+        """
+        Get memory usage statistics from cgroup for the container.
+        
+        Returns:
+            MemoryStats: Memory usage statistics
+            
+        Raises:
+            RuntimeError: If the container is not running or stats cannot be retrieved
+        """
+        container_id = await self.get_container_id()
+        return await read_memory_stats(container_id)
+
+    async def get_cpu_percentage(self) -> float:
+        """
+        Get CPU usage percentage for the container process.
+        
+        Returns:
+            float: CPU usage percentage (0.0 to 100.0+)
+            
+        Raises:
+            RuntimeError: If the container is not running or CPU stats cannot be retrieved
+        """
+        pid = await self.get_pid()
+        return await get_process_cpu_usage(pid)
+
+    async def get_disk_io(self) -> BlockIOStats:
+        """
+        Get disk I/O statistics from cgroup for the container.
+        
+        Returns:
+            BlockIOStats: Disk I/O statistics
+            
+        Raises:
+            RuntimeError: If the container is not running or stats cannot be retrieved
+        """
+        container_id = await self.get_container_id()
+        return await read_block_io_stats(container_id)
+
+    async def get_network_io(self) -> NetworkStats:
+        """
+        Get network I/O statistics for the container process.
+        
+        Returns:
+            NetworkStats: Network I/O statistics
+            
+        Raises:
+            RuntimeError: If the container is not running or stats cannot be retrieved
+        """
+        pid = await self.get_pid()
+        return await read_container_network_stats(pid)

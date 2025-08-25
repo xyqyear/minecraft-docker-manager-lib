@@ -2,6 +2,12 @@ import asyncio
 import shutil
 from pathlib import Path
 
+import psutil
+from asyncer import asyncify
+from psutil import NoSuchProcess, Process
+
+process_obj_cache = dict[int, Process]()
+
 
 async def async_rmtree(path: Path):
     await asyncio.to_thread(shutil.rmtree, path)
@@ -45,3 +51,31 @@ async def exec_command(command: str, *args: str) -> str:
     if process.returncode != 0:
         raise RuntimeError(f"Failed to exec command: {command}\n{stderr.decode()}")
     return stdout.decode()
+
+
+@asyncify
+def get_process_memory_usage(pid: int) -> int:
+    """
+    Get the memory usage of a process by its PID
+    in bytes
+    """
+    try:
+        process = process_obj_cache.get(pid, psutil.Process(pid))
+        process_obj_cache[pid] = process
+        return process.memory_info().rss
+    except NoSuchProcess:
+        return 0
+
+
+@asyncify
+def get_process_cpu_usage(pid: int) -> float:
+    """
+    Get the CPU usage of a process by its PID
+    in percentage
+    """
+    try:
+        process = process_obj_cache.get(pid, psutil.Process(pid))
+        process_obj_cache[pid] = process
+        return process.cpu_percent()
+    except NoSuchProcess:
+        return 0.0

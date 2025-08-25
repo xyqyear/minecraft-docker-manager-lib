@@ -28,7 +28,6 @@ class MCServerStatus(str, Enum):
     RUNNING = "running"  # Container is running but may not be healthy
     STARTING = "starting"  # Container is starting
     HEALTHY = "healthy"  # Container is running and healthy
-    PAUSED = "paused"  # Container is running, healthy, but paused by autopause
 
 
 @dataclass

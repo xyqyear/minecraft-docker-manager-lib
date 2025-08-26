@@ -54,6 +54,16 @@ class MCServerInfo:
     game_port: int
     rcon_port: int
 
+@dataclass(frozen=True)
+class MCServerRunningInfo:
+    cpu_percentage: float
+    memory_usage_bytes: int
+    disk_read_bytes: int
+    disk_write_bytes: int
+    network_receive_bytes: int
+    network_send_bytes: int
+    disk_usage_bytes: int
+
 
 @dataclass
 class MCPlayerMessage:
@@ -327,6 +337,46 @@ class MCInstance:
             raise RuntimeError(f"Server {self._name} is not running")
         while not await self.healthy():
             await asyncio.sleep(0.5)
+
+    async def get_disk_usage(self) -> int:
+        """
+        获取服务器数据目录的磁盘使用量，单位为字节
+        """
+        if not await aioos.path.exists(self._project_path / "data"):
+            raise RuntimeError(f"Data directory does not exist for server {self._name}")
+
+        du_result = await exec_command("du", "-sb", str(self._project_path / "data"))
+        du_usage_str = du_result.split()[0]
+        try:
+            return int(du_usage_str)
+        except ValueError:
+            return 0
+
+    async def get_server_running_info(self):
+        """
+        获取服务器运行时信息，包括CPU、内存、磁盘写入和读取，网络写入和读取以及使用量（使用du命令）
+        du命令使用execute_command在project_path/data目录下执行，获取该目录的磁盘使用量
+        """
+        if not await self.running():
+            raise RuntimeError(f"Server {self._name} is not running")
+
+        memory_stats, cpu_percentage, disk_io, network_io, du_usage = await asyncio.gather(
+            self.get_memory_usage(),
+            self.get_cpu_percentage(),
+            self.get_disk_io(),
+            self.get_network_io(),
+            self.get_disk_usage(),
+        )
+
+        return MCServerRunningInfo(
+            cpu_percentage=cpu_percentage,
+            memory_usage_bytes=memory_stats.anon,
+            disk_read_bytes=disk_io.total_read_bytes,
+            disk_write_bytes=disk_io.total_write_bytes,
+            network_receive_bytes=network_io.total_rx_bytes,
+            network_send_bytes=network_io.total_tx_bytes,
+            disk_usage_bytes=du_usage,
+        )
 
     async def get_server_info(self):
         """

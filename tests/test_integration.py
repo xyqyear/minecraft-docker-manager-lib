@@ -11,6 +11,7 @@ from minecraft_docker_manager_lib import (
     MCServerInfo,
 )
 from minecraft_docker_manager_lib.docker.manager import DockerManager
+from minecraft_docker_manager_lib.mc_compose_file import ServerType
 
 from .mcc_docker_wrapper import MCCDockerWrapper
 from .test_utils import (
@@ -62,12 +63,20 @@ async def test_integration(teardown: list[str]):
         [
             MCServerInfo(
                 name="testserver1",
+                path=server1.get_project_path(),
+                java_version=21,
+                max_memory_bytes=500,
+                server_type=ServerType.VANILLA,
                 game_version="1.20.4",
                 game_port=34544,
                 rcon_port=34544 + 1,
             ),
             MCServerInfo(
                 name="testserver2",
+                path=server2.get_project_path(),
+                java_version=21,
+                max_memory_bytes=500,
+                server_type=ServerType.VANILLA,
                 game_version="1.20.4",
                 game_port=34554,
                 rcon_port=34554 + 1,

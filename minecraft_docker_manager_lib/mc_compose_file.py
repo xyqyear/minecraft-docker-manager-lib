@@ -1,12 +1,23 @@
+import re
+from enum import Enum
 from typing import Any, Dict, List, cast
 
 from pydantic import BaseModel
-from typing_extensions import TypedDict
 
 from .docker.compose_file import ComposeFile, Ports, Volumes
 
 
-class MCService(TypedDict):
+class ServerType(str, Enum):
+    VANILLA = "VANILLA"
+    PAPER = "PAPER"
+    FORGE = "FORGE"
+    NEOFORGE = "NEOFORGE"
+    FABRIC = "FABRIC"
+    SPIGOT = "SPIGOT"
+    BUKKIT = "BUKKIT"
+    CUSTOM = "CUSTOM"
+
+class MCService(BaseModel):
     """强类型的Minecraft服务定义"""
     container_name: str
     image: str
@@ -18,7 +29,7 @@ class MCService(TypedDict):
     restart: str
 
 
-class MCServices(TypedDict):
+class MCServices(BaseModel):
     """强类型的Services，确保包含mc服务"""
     mc: MCService
 
@@ -134,15 +145,15 @@ class MCComposeFile(BaseModel):
     @property
     def mc_service(self) -> MCService:
         """直接访问mc服务，无需类型检查"""
-        return self.services["mc"]
+        return self.services.mc
     
     def get_server_name(self) -> str:
         """获取服务器名称"""
-        return self.mc_service["container_name"][3:]  # 移除"mc-"前缀
+        return self.mc_service.container_name[3:]  # 移除"mc-"前缀
     
     def get_game_port(self) -> int:
         """获取游戏端口"""
-        for port in self.mc_service["ports"]:
+        for port in self.mc_service.ports:
             if str(port.target) == "25565":
                 if port.published is None:
                     return 25565
@@ -151,7 +162,7 @@ class MCComposeFile(BaseModel):
     
     def get_rcon_port(self) -> int:
         """获取RCON端口"""
-        for port in self.mc_service["ports"]:
+        for port in self.mc_service.ports:
             if str(port.target) == "25575":
                 if port.published is None:
                     return 25575
@@ -160,4 +171,43 @@ class MCComposeFile(BaseModel):
     
     def get_game_version(self) -> str:
         """获取游戏版本"""
-        return self.mc_service["environment"]["VERSION"]
+        return self.mc_service.environment["VERSION"]
+
+    def get_server_type(self) -> ServerType:
+        """获取服务器类型"""
+        if "SERVER_TYPE" not in self.mc_service.environment:
+            return ServerType.VANILLA
+        return ServerType(self.mc_service.environment["SERVER_TYPE"])
+
+    def get_java_version(self) -> int:
+        """获取Java版本"""
+        # itzg/minecraft-server:java8
+        # itzg/minecraft-server:java21-graalvm
+        # use regex to match
+        image = self.mc_service.image
+        match = re.search(r"itzg/minecraft-server:java(\d+)", image)
+        if match:
+            return int(match.group(1))
+        return 0
+
+    def get_max_memory_bytes(self) -> int:
+        """获取最大内存，返回字节数"""
+        if "MAX_MEMORY" in self.mc_service.environment:
+            memory_str = self.mc_service.environment["MAX_MEMORY"]
+            # Parse memory value with units (e.g., "500M", "1G", "512m", "2g")
+            match = re.search(r"(\d+)([MmGgKk]?)", memory_str)
+            if match:
+                value = int(match.group(1))
+                unit = match.group(2).upper() if match.group(2) else ""
+                
+                if unit == "K":
+                    return value * 1024
+                elif unit == "M":
+                    return value * 1024 * 1024
+                elif unit == "G":
+                    return value * 1024 * 1024 * 1024
+                else:
+                    # No unit, assume MB (common for Minecraft)
+                    return value * 1024 * 1024
+            return 0
+        return 0

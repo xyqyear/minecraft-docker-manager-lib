@@ -2,6 +2,7 @@
 import pytest
 
 from minecraft_docker_manager_lib import DockerMCManager, MCServerInfo, MCServerStatus
+from minecraft_docker_manager_lib.mc_compose_file import ServerType
 
 from .test_utils import (
     TEST_ROOT_PATH,
@@ -17,12 +18,18 @@ async def test_minecraft_instance(teardown: list[str]):
     teardown.append("mc-testserver1")
 
     await server1.create(create_mc_server_compose_yaml("testserver1", 34544, 34544 + 1))
-    assert await server1.get_server_info() == MCServerInfo(
+    server_info = await server1.get_server_info()
+    expected_info = MCServerInfo(
         name="testserver1",
+        path=server1.get_project_path(),
+        java_version=21,
+        max_memory_bytes=524288000,  # 500M in bytes = 500 * 1024 * 1024
+        server_type=ServerType.VANILLA,
         game_version="1.20.4",
         game_port=34544,
         rcon_port=34545,
     )
+    assert server_info == expected_info
     mc_compose = await server1.get_compose_obj()
 
     assert mc_compose.get_server_name() == "testserver1"

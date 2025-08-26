@@ -17,7 +17,7 @@ from .docker.cgroup import (
 from .docker.compose_file import ComposeFile
 from .docker.manager import ComposeManager
 from .docker.network import NetworkStats, read_container_network_stats
-from .mc_compose_file import MCComposeFile
+from .mc_compose_file import MCComposeFile, ServerType
 from .utils import async_rmtree, exec_command, get_process_cpu_usage
 
 PLAYER_MESSAGE_PATTERN = re.compile(
@@ -46,6 +46,10 @@ class LogType:
 @dataclass(frozen=True)
 class MCServerInfo:
     name: str
+    path: str | Path
+    java_version: int
+    max_memory_bytes: int
+    server_type: ServerType
     game_version: str
     game_port: int
     rcon_port: int
@@ -335,6 +339,10 @@ class MCInstance:
 
         return MCServerInfo(
             name=mc_compose.get_server_name(),
+            path=self._compose_manager.project_path,
+            java_version=mc_compose.get_java_version(),
+            max_memory_bytes=mc_compose.get_max_memory_bytes(),
+            server_type=mc_compose.get_server_type(),
             game_version=mc_compose.get_game_version(),
             game_port=mc_compose.get_game_port(),
             rcon_port=mc_compose.get_rcon_port(),

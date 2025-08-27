@@ -5,3 +5,4 @@ __pycache__
 *.ipynb
 .coverage
 cov.xml
+instructions.md

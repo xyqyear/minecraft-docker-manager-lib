@@ -23,7 +23,7 @@ class MCService(BaseModel):
     image: str
     ports: List[Ports]
     volumes: List[Volumes]
-    environment: Dict[str, str]
+    environment: Dict[str, str | float | bool]
     stdin_open: bool
     tty: bool
     restart: str
@@ -98,7 +98,7 @@ class MCComposeFile(BaseModel):
         # 验证和转换环境变量（ComposeFile已经转换为dict）
         if not isinstance(mc_service.environment, dict):
             raise ValueError("Invalid environment in compose file")
-        environment = cast(Dict[str, str], mc_service.environment)
+        environment = cast(Dict[str, str | float | bool], mc_service.environment)
         
         # 验证必需的环境变量
         if "VERSION" not in environment:
@@ -171,13 +171,15 @@ class MCComposeFile(BaseModel):
     
     def get_game_version(self) -> str:
         """获取游戏版本"""
-        return self.mc_service.environment["VERSION"]
+        version = self.mc_service.environment["VERSION"]
+        return str(version)
 
     def get_server_type(self) -> ServerType:
         """获取服务器类型"""
         if "SERVER_TYPE" not in self.mc_service.environment:
             return ServerType.VANILLA
-        return ServerType(self.mc_service.environment["SERVER_TYPE"])
+        server_type_value = self.mc_service.environment["SERVER_TYPE"]
+        return ServerType(str(server_type_value))
 
     def get_java_version(self) -> int:
         """获取Java版本"""
@@ -193,7 +195,8 @@ class MCComposeFile(BaseModel):
     def get_max_memory_bytes(self) -> int:
         """获取最大内存，返回字节数"""
         if "MAX_MEMORY" in self.mc_service.environment:
-            memory_str = self.mc_service.environment["MAX_MEMORY"]
+            memory_value = self.mc_service.environment["MAX_MEMORY"]
+            memory_str = str(memory_value)
             # Parse memory value with units (e.g., "500M", "1G", "512m", "2g")
             match = re.search(r"(\d+)([MmGgKk]?)", memory_str)
             if match:

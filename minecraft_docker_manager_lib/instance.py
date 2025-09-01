@@ -29,12 +29,12 @@ ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 class MCServerStatus(str, Enum):
     """Minecraft server status levels in hierarchical order"""
 
-    REMOVED = "removed"  # Server directory/config doesn't exist
-    EXISTS = "exists"  # Server config exists but container not created
-    CREATED = "created"  # Container created but not running
-    RUNNING = "running"  # Container is running but may not be healthy
-    STARTING = "starting"  # Container is starting
-    HEALTHY = "healthy"  # Container is running and healthy
+    REMOVED = "REMOVED"  # Server directory/config doesn't exist
+    EXISTS = "EXISTS"  # Server config exists but container not created
+    CREATED = "CREATED"  # Container created but not running
+    RUNNING = "RUNNING"  # Container is running but may not be healthy
+    STARTING = "STARTING"  # Container is starting
+    HEALTHY = "HEALTHY"  # Container is running and healthy
 
 
 @dataclass

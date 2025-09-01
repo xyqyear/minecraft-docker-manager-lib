@@ -63,6 +63,30 @@ class MCServerRunningInfo:
     network_receive_bytes: int
     network_send_bytes: int
     disk_usage_bytes: int
+    disk_total_bytes: int
+    disk_available_bytes: int
+
+    @property
+    def disk_usage_percentage(self) -> float:
+        """Calculate disk usage percentage"""
+        if self.disk_total_bytes == 0:
+            return 0.0
+        return (self.disk_usage_bytes / self.disk_total_bytes) * 100
+
+
+@dataclass(frozen=True)
+class DiskSpaceInfo:
+    """Disk space information for server data directory"""
+    used_bytes: int
+    total_bytes: int
+    available_bytes: int
+
+    @property
+    def usage_percentage(self) -> float:
+        """Calculate disk usage percentage"""
+        if self.total_bytes == 0:
+            return 0.0
+        return (self.used_bytes / self.total_bytes) * 100
 
 
 @dataclass
@@ -341,16 +365,62 @@ class MCInstance:
     async def get_disk_usage(self) -> int:
         """
         获取服务器数据目录的磁盘使用量，单位为字节
+        
+        Note: This method is deprecated. Use get_disk_space_info() instead.
+        """
+        disk_info = await self.get_disk_space_info()
+        return disk_info.used_bytes
+
+    async def get_disk_space_info(self) -> DiskSpaceInfo:
+        """
+        获取服务器数据目录的完整磁盘空间信息
+        
+        Returns:
+            DiskSpaceInfo: Contains used, total, and available disk space in bytes
+            
+        Raises:
+            RuntimeError: If data directory does not exist
         """
         if not await aioos.path.exists(self._project_path / "data"):
             raise RuntimeError(f"Data directory does not exist for server {self._name}")
 
+        # Get used space with du command
         du_result = await exec_command("du", "-sb", str(self._project_path / "data"))
         du_usage_str = du_result.split()[0]
         try:
-            return int(du_usage_str)
+            used_bytes = int(du_usage_str)
         except ValueError:
-            return 0
+            used_bytes = 0
+
+        # Get filesystem information with df command
+        df_result = await exec_command("df", "-B1", str(self._project_path / "data"))
+        # df output format: Filesystem 1B-blocks Used Available Use% Mounted on
+        # We want the second line with the actual data
+        df_lines = df_result.strip().split('\n')
+        if len(df_lines) < 2:
+            raise RuntimeError(f"Unable to get filesystem info for {self._project_path / 'data'}")
+        
+        # Parse df output - handle case where filesystem name might be on separate line
+        df_data_line = df_lines[1]
+        if len(df_lines) > 2 and not df_data_line.strip().split()[0].isdigit():
+            # Filesystem name is on separate line, data is on next line
+            df_data_line = df_lines[2] if len(df_lines) > 2 else df_lines[1]
+        
+        df_parts = df_data_line.strip().split()
+        if len(df_parts) < 4:
+            raise RuntimeError(f"Unable to parse df output: {df_result}")
+        
+        try:
+            total_bytes = int(df_parts[1])  # 1B-blocks (total)
+            available_bytes = int(df_parts[3])  # Available
+        except (ValueError, IndexError):
+            raise RuntimeError(f"Unable to parse df output numbers: {df_result}")
+
+        return DiskSpaceInfo(
+            used_bytes=used_bytes,
+            total_bytes=total_bytes,
+            available_bytes=available_bytes
+        )
 
     async def get_server_running_info(self):
         """
@@ -360,12 +430,12 @@ class MCInstance:
         if not await self.running():
             raise RuntimeError(f"Server {self._name} is not running")
 
-        memory_stats, cpu_percentage, disk_io, network_io, du_usage = await asyncio.gather(
+        memory_stats, cpu_percentage, disk_io, network_io, disk_space_info = await asyncio.gather(
             self.get_memory_usage(),
             self.get_cpu_percentage(),
             self.get_disk_io(),
             self.get_network_io(),
-            self.get_disk_usage(),
+            self.get_disk_space_info(),
         )
 
         return MCServerRunningInfo(
@@ -375,7 +445,9 @@ class MCInstance:
             disk_write_bytes=disk_io.total_write_bytes,
             network_receive_bytes=network_io.total_rx_bytes,
             network_send_bytes=network_io.total_tx_bytes,
-            disk_usage_bytes=du_usage,
+            disk_usage_bytes=disk_space_info.used_bytes,
+            disk_total_bytes=disk_space_info.total_bytes,
+            disk_available_bytes=disk_space_info.available_bytes,
         )
 
     async def get_server_info(self):

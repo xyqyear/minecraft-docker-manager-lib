@@ -65,7 +65,7 @@ async def test_integration(teardown: list[str]):
                 name="testserver1",
                 path=server1.get_project_path(),
                 java_version=21,
-                max_memory_bytes=500,
+                max_memory_bytes=524288000,  # 500M in bytes
                 server_type=ServerType.VANILLA,
                 game_version="1.20.4",
                 game_port=34544,
@@ -75,7 +75,7 @@ async def test_integration(teardown: list[str]):
                 name="testserver2",
                 path=server2.get_project_path(),
                 java_version=21,
-                max_memory_bytes=500,
+                max_memory_bytes=524288000,  # 500M in bytes
                 server_type=ServerType.VANILLA,
                 game_version="1.20.4",
                 game_port=34554,

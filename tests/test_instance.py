@@ -2,6 +2,7 @@
 import pytest
 
 from minecraft_docker_manager_lib import DockerMCManager, MCServerInfo, MCServerStatus
+from minecraft_docker_manager_lib.instance import DiskSpaceInfo
 from minecraft_docker_manager_lib.mc_compose_file import ServerType
 
 from .test_utils import (
@@ -121,3 +122,120 @@ async def test_server_status_lifecycle(teardown: list[str]):
     assert not await server.created()
     assert not await server.running()
     assert not await server.healthy()
+
+
+@pytest.mark.asyncio
+async def test_disk_space_info_dataclass():
+    """Test DiskSpaceInfo dataclass functionality"""
+    # Test normal case
+    disk_info = DiskSpaceInfo(
+        used_bytes=1024 * 1024 * 1024,  # 1GB used
+        total_bytes=10 * 1024 * 1024 * 1024,  # 10GB total
+        available_bytes=9 * 1024 * 1024 * 1024,  # 9GB available
+    )
+    
+    assert disk_info.used_bytes == 1024 * 1024 * 1024
+    assert disk_info.total_bytes == 10 * 1024 * 1024 * 1024
+    assert disk_info.available_bytes == 9 * 1024 * 1024 * 1024
+    assert disk_info.usage_percentage == 10.0  # 1GB / 10GB = 10%
+    
+    # Test edge case with zero total
+    disk_info_zero = DiskSpaceInfo(
+        used_bytes=0,
+        total_bytes=0,
+        available_bytes=0,
+    )
+    assert disk_info_zero.usage_percentage == 0.0
+    
+    # Test 100% usage case
+    disk_info_full = DiskSpaceInfo(
+        used_bytes=1000,
+        total_bytes=1000,
+        available_bytes=0,
+    )
+    assert disk_info_full.usage_percentage == 100.0
+
+
+@pytest.mark.asyncio
+async def test_get_disk_space_info(teardown: list[str]):
+    """Test get_disk_space_info method"""
+    docker_mc_manager = DockerMCManager(TEST_ROOT_PATH)
+    server = docker_mc_manager.get_instance("disk-space-test")
+    teardown.append("mc-disk-space-test")
+    
+    # Test error when data directory doesn't exist
+    with pytest.raises(RuntimeError, match="Data directory does not exist"):
+        await server.get_disk_space_info()
+    
+    # Create server to set up data directory
+    await server.create(create_mc_server_compose_yaml("disk-space-test", 34650, 34651))
+    
+    # Test successful disk space info retrieval
+    disk_info = await server.get_disk_space_info()
+    assert isinstance(disk_info, DiskSpaceInfo)
+    assert disk_info.used_bytes >= 0
+    assert disk_info.total_bytes > 0
+    assert disk_info.available_bytes >= 0
+    assert disk_info.total_bytes >= disk_info.used_bytes
+    
+    # Test that usage percentage is calculated correctly
+    expected_percentage = (disk_info.used_bytes / disk_info.total_bytes) * 100
+    assert abs(disk_info.usage_percentage - expected_percentage) < 0.01
+
+
+@pytest.mark.asyncio 
+async def test_get_disk_usage_backward_compatibility(teardown: list[str]):
+    """Test that get_disk_usage maintains backward compatibility"""
+    docker_mc_manager = DockerMCManager(TEST_ROOT_PATH)
+    server = docker_mc_manager.get_instance("disk-usage-compat-test")
+    teardown.append("mc-disk-usage-compat-test")
+    
+    # Create server to set up data directory
+    await server.create(create_mc_server_compose_yaml("disk-usage-compat-test", 34652, 34653))
+    
+    # Test that get_disk_usage returns the same as get_disk_space_info.used_bytes
+    disk_usage = await server.get_disk_usage()
+    disk_space_info = await server.get_disk_space_info()
+    
+    assert disk_usage == disk_space_info.used_bytes
+    assert isinstance(disk_usage, int)
+
+
+@pytest.mark.asyncio
+async def test_server_running_info_with_disk_space(teardown: list[str]):
+    """Test that MCServerRunningInfo includes complete disk space information"""
+    docker_mc_manager = DockerMCManager(TEST_ROOT_PATH)
+    server = docker_mc_manager.get_instance("running-info-disk-test")
+    teardown.append("mc-running-info-disk-test")
+    
+    # Create and start server
+    await server.create(create_mc_server_compose_yaml("running-info-disk-test", 34654, 34655))
+    await server.up()
+    
+    # Wait for server to be running
+    await server.wait_until_healthy()
+    
+    # Get server running info
+    running_info = await server.get_server_running_info()
+    
+    # Test that all disk space fields are present and valid
+    assert running_info.disk_usage_bytes >= 0
+    assert running_info.disk_total_bytes > 0
+    assert running_info.disk_available_bytes >= 0
+    
+    # Test total = used + available (approximately, allowing for filesystem overhead)
+    total_accounted = running_info.disk_usage_bytes + running_info.disk_available_bytes
+    # Allow some tolerance for filesystem overhead
+    assert abs(running_info.disk_total_bytes - total_accounted) / running_info.disk_total_bytes < 0.1
+    
+    # Test disk usage percentage calculation
+    expected_percentage = (running_info.disk_usage_bytes / running_info.disk_total_bytes) * 100
+    assert abs(running_info.disk_usage_percentage - expected_percentage) < 0.01
+    
+    # Test that other fields are still present
+    assert running_info.cpu_percentage >= 0
+    assert running_info.memory_usage_bytes >= 0
+    assert running_info.disk_read_bytes >= 0
+    assert running_info.disk_write_bytes >= 0
+    assert running_info.network_receive_bytes >= 0
+    assert running_info.network_send_bytes >= 0
